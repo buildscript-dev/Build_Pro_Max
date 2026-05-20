@@ -1,18 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Icon, AiOrb, Avatar } from '../ui/Icons';
 import { DOCK_ITEMS, accentColor } from '../../data';
+import { FocusToggle } from '../focus/FocusToggle';
 
 function mag(distance, max = 1.5, falloff = 110) {
   const t = Math.max(0, 1 - distance / falloff);
   return 1 + (max - 1) * (1 - Math.pow(1 - t, 3));
 }
 
-export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, recentActions = [], hasNotifications = false }) => {
+export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, onOpenFocus, focusMode = "off", recentActions = [], hasNotifications = false }) => {
   const [mouseX, setMouseX] = useState(null);
   const ref = useRef(null);
   const itemRefs = useRef({});
 
-  if (variant === "rail") return <SideRail active={active} onSelect={onSelect} onOpenCmdK={onOpenCmdK} hasNotifications={hasNotifications} />;
+  if (variant === "rail") return <SideRail active={active} onSelect={onSelect} onOpenCmdK={onOpenCmdK} onOpenFocus={onOpenFocus} focusMode={focusMode} hasNotifications={hasNotifications} />;
   if (variant === "top") return null;
 
   return (
@@ -20,6 +21,7 @@ export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, recentAct
       ref={ref}
       onMouseMove={(e) => setMouseX(e.clientX)}
       onMouseLeave={() => setMouseX(null)}
+      className="dock-awards"
       style={{
         position: "fixed", left: "50%", bottom: 18, transform: "translateX(-50%)",
         zIndex: 50, display: "flex", alignItems: "flex-end", gap: 4,
@@ -58,6 +60,7 @@ export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, recentAct
               onClick={() => onSelect(item.id)}
               title={item.label}
               aria-label={item.label}
+              className="magnetic-btn"
               style={{
                 width: base, height: base, borderRadius: 12,
                 background: isActive ?
@@ -102,7 +105,8 @@ export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, recentAct
               background: "rgba(26, 20, 16, 0.88)",
               color: "#fff8e8", fontSize: 11, fontWeight: 500,
               whiteSpace: "nowrap", pointerEvents: "none",
-              boxShadow: "0 8px 20px -4px rgba(0,0,0,.3)"
+              boxShadow: "0 8px 20px -4px rgba(0,0,0,.3)",
+              animation: 'pop-in 180ms var(--ease-genie) both'
             }}>{item.label}</div>
             }
             {isActive &&
@@ -116,7 +120,8 @@ export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, recentAct
       })}
 
       <div style={{ width: 1, alignSelf: "stretch", margin: "6px 8px", background: "rgba(26,20,16,.10)" }} />
-      <div style={{ position: "relative", width: 44, display: "flex", justifyContent: "center", alignItems: "flex-end", height: 60 }}>
+      <div style={{ position: "relative", display: "flex", alignItems: "flex-end", gap: 4, paddingBottom: 8 }}>
+        <FocusToggle focusMode={focusMode} onClick={onOpenFocus} />
         <button
           onClick={onOpenCmdK}
           title="AI command bar (⌘K)"
@@ -136,7 +141,7 @@ export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, recentAct
   );
 };
 
-const SideRail = ({ active, onSelect, onOpenCmdK, hasNotifications }) => {
+const SideRail = ({ active, onSelect, onOpenCmdK, onOpenFocus, focusMode, hasNotifications }) => {
   return (
     <div style={{
       position: "fixed", left: 16, top: "50%", transform: "translateY(-50%)",
@@ -175,6 +180,7 @@ const SideRail = ({ active, onSelect, onOpenCmdK, hasNotifications }) => {
           </button>);
       })}
       <div style={{ height: 1, background: "rgba(26,20,16,.10)", margin: "4px 6px" }} />
+      <FocusToggle focusMode={focusMode} onClick={onOpenFocus} />
       <button onClick={onOpenCmdK} aria-label="Open AI command bar" style={{
         width: 40, height: 40, borderRadius: 10,
         background: "rgba(26,20,16,.86)", color: "#fff8e8",
@@ -185,7 +191,7 @@ const SideRail = ({ active, onSelect, onOpenCmdK, hasNotifications }) => {
   );
 };
 
-export const TopBar = ({ user, today, onOpenCmdK, variant = "dock", active, onSelect, hasNotifications, notifications = [], onClearNotifications, onMarkAllRead }) => {
+export const TopBar = ({ user, today, onOpenCmdK, variant = "dock", active, onSelect, hasNotifications, notifications = [], onClearNotifications, onMarkAllRead, scrolled = false }) => {
   const showInlineNav = variant === "top";
   const [showNotif, setShowNotif] = useState(false);
   const [lastSync, setLastSync] = useState(() => Date.now());
@@ -201,16 +207,17 @@ export const TopBar = ({ user, today, onOpenCmdK, variant = "dock", active, onSe
   const syncLabel = syncAgo < 5 ? 'Synced' : syncAgo < 60 ? `${syncAgo}s ago` : `${Math.floor(syncAgo / 60)}m ago`;
 
   return (
-    <div style={{
-      position: "fixed", top: 14, left: 14, right: 14, zIndex: 40,
-      display: "flex", alignItems: "center", gap: 12,
-      height: 52, paddingLeft: 18, paddingRight: 8,
-      background: "rgba(255, 252, 244, 0.45)",
-      backdropFilter: "blur(20px) saturate(180%)",
-      WebkitBackdropFilter: "blur(20px) saturate(180%)",
-      border: "0.5px solid rgba(255,255,255,.6)",
-      boxShadow: "0 1px 0 rgba(255,255,255,.7) inset, 0 6px 24px -8px rgba(46,30,12,.18)", borderRadius: "10px"
-    }}>
+    <div className={`top-bar-awards ${scrolled ? 'scrolled' : ''}`}
+      style={{
+        position: "fixed", top: 14, left: 14, right: 14, zIndex: 40,
+        display: "flex", alignItems: "center", gap: 12,
+        height: 52, paddingLeft: 18, paddingRight: 8,
+        background: "rgba(255, 252, 244, 0.45)",
+        backdropFilter: "blur(20px) saturate(180%)",
+        WebkitBackdropFilter: "blur(20px) saturate(180%)",
+        border: "0.5px solid rgba(255,255,255,.6)",
+        boxShadow: "0 1px 0 rgba(255,255,255,.7) inset, 0 6px 24px -8px rgba(46,30,12,.18)", borderRadius: "10px"
+      }}>
       <button
         onClick={() => onSelect('files')}
         aria-label="Go to Files screen"

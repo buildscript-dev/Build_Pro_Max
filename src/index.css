@@ -1,5 +1,6 @@
 /* Build_PRO_MAX_1 — Paper × Liquid Glass design tokens
-   ─────────────────────────────────────────────────── */
+   AwWWARDS-level upgrade: GSAP, Lenis, Spline, Video, 2D/3D layers
+   ───────────────────────────────────────────────────────────────── */
 
 :root {
   /* Paper canvas */
@@ -16,7 +17,7 @@
   --ink-4: #b3a890;            /* hairlines, captions */
   --ink-line: rgba(26, 20, 16, 0.08);
 
-  /* Warm accent palette (Option 4 — amber / orange / coral) */
+  /* Warm accent palette (deepened for editorial contrast) */
   --accent-amber: #f5a524;
   --accent-orange: #f06b1c;
   --accent-coral: #e7402e;
@@ -83,6 +84,14 @@ html, body, #root {
   margin: 0;
 }
 
+html.lenis, html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
 body {
   font-family: var(--font-sans);
   color: var(--ink-1);
@@ -103,6 +112,7 @@ body {
     var(--paper-0);
   overflow: hidden;
   transition: background 600ms var(--ease-glass);
+  z-index: -2;
 }
 
 /* Mono variant — black-and-white canvas with shifting light */
@@ -233,6 +243,22 @@ body {
     inset 0 0 6px rgba(255, 255, 255, 0.6);
 }
 
+/* ─── Ambient Video Layer ─────────────────────────────────── */
+.ambient-video {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.18;
+  mix-blend-mode: overlay;
+  filter: saturate(0.6) contrast(1.1);
+}
+.ambient-video video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* ─── Liquid Glass: frame + inner pane ───────────────────────
    Each .glass is an outer transparent frame with a metallic
    gold/cream gradient ring. Content lives inside .glass-pane.
@@ -252,7 +278,8 @@ body {
   isolation: isolate;
   display: flex;
   flex-direction: column;
-  transition: box-shadow var(--motion-mid) var(--ease-glass);
+  transition: box-shadow var(--motion-mid) var(--ease-glass),
+              transform var(--motion-mid) var(--ease-glass);
 }
 
 /* Metallic ring — static, no rotation animation */
@@ -502,6 +529,36 @@ hr { border: 0; height: 1px; background: var(--ink-line); margin: 0; }
 /* ─── Performance: reduce ambient orb blur overhead ────────── */
 .ambient .orb { filter: blur(60px); }  /* was 80px — 25% less GPU cost */
 
+/* ─── Focus Modes ────────────────────────────────────────── */
+body.focus-execution .scroll {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+body.focus-execution [data-screen-label] > div > div[style*="position: fixed"] {
+  /* hide floating panels */
+}
+body.focus-learner .magnetic-btn {
+  transition: transform 200ms var(--ease-snap), box-shadow 200ms ease !important;
+}
+body.focus-learner .magnetic-btn:hover {
+  box-shadow: 0 0 0 2px var(--info)33, 0 4px 12px -2px rgba(42,111,219,.2) !important;
+}
+body.focus-active .dock-awards {
+  opacity: 0.92;
+}
+body.focus-active .top-bar-awards {
+  opacity: 0.92;
+}
+
+/* Focus mode entrance animation */
+@keyframes focus-enter {
+  0% { opacity: 0; transform: translateY(-4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.focus-indicator {
+  animation: focus-enter 400ms var(--ease-glass) both;
+}
+
 /* ─── Accessibility: prefers-reduced-motion ─────────────────
    Disables all decorative animations for users who request it
    via OS accessibility settings (vestibular / epilepsy safety).
@@ -714,4 +771,189 @@ hr { border: 0; height: 1px; background: var(--ink-line); margin: 0; }
   [data-screen-label*="dashboard"] .scroll > div > div[style*="grid-template-columns"] {
     grid-auto-rows: minmax(140px, auto) !important;
   }
+}
+
+/* ═════════════════════════════════════════════════════════════
+   AWWWARDS-LEVEL UPGRADE ADDITIONS
+   ═════════════════════════════════════════════════════════════ */
+
+/* ─── Animated gradient mesh background layer ──────────────── */
+.gradient-mesh {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(at 0% 0%, rgba(245,165,36,0.25) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(231,64,46,0.20) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(194,24,91,0.15) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(240,107,28,0.20) 0px, transparent 50%);
+  background-size: 120% 120%;
+  animation: gradient-shift 18s ease-in-out infinite alternate;
+}
+@keyframes gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ─── Noise overlay (animated with tiny opacity pulse) ─────── */
+.noise-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+  animation: noise-drift 0.5s steps(4) infinite;
+}
+@keyframes noise-drift {
+  0% { background-position: 0 0; }
+  100% { background-position: 256px 256px; }
+}
+
+/* ─── Page transition wrapper ──────────────────────────────── */
+.page-transition-wrapper {
+  position: fixed;
+  inset: 0;
+  opacity: 0;
+  transform: translateY(18px) scale(0.995);
+  will-change: transform, opacity;
+}
+.page-transition-wrapper.active {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition: opacity 500ms var(--ease-glass), transform 500ms var(--ease-glass);
+}
+
+/* ─── Entrance animations (ScrollTrigger ready) ────────────── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); filter: blur(3px); }
+  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+@keyframes fade-in-scale {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.anim-fade-up {
+  opacity: 0;
+  transform: translateY(24px);
+  filter: blur(3px);
+  transition: opacity 700ms var(--ease-glass), transform 700ms var(--ease-glass), filter 700ms var(--ease-glass);
+}
+.anim-fade-up.revealed {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+
+.anim-scale-in {
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 600ms var(--ease-genie), transform 600ms var(--ease-genie);
+}
+.anim-scale-in.revealed {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.anim-slide-in-right {
+  opacity: 0;
+  transform: translateX(40px);
+  transition: opacity 600ms var(--ease-glass), transform 600ms var(--ease-glass);
+}
+.anim-slide-in-right.revealed {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ─── Glass hover lift (awwwards micro-interaction) ──────── */
+.glass-hover {
+  transition: transform 360ms var(--ease-genie), box-shadow 360ms var(--ease-genie);
+}
+.glass-hover:hover {
+  transform: translateY(-3px) scale(1.005);
+  box-shadow:
+    0 2px 1px rgba(255,255,255,.95) inset,
+    0 -1px 1px rgba(0,0,0,.06) inset,
+    0 40px 80px -20px rgba(46, 30, 12, 0.40),
+    0 16px 32px -10px rgba(46, 30, 12, 0.22),
+    0 2px 6px -2px rgba(46, 30, 12, 0.10);
+}
+
+/* ─── Magnetic button effect placeholder ───────────────────── */
+.magnetic-btn {
+  transition: transform 200ms var(--ease-snap);
+}
+
+/* ─── Spline scene container ───────────────────────────────── */
+.spline-scene {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+}
+.spline-scene canvas {
+  border-radius: inherit;
+}
+
+/* ─── 2D animated SVG wave ─────────────────────────────────── */
+@keyframes wave-anim {
+  0% { d: path("M0,32 C120,60 240,4 360,32 C480,60 600,4 720,32 L720,80 L0,80 Z"); }
+  50% { d: path("M0,32 C120,4 240,60 360,32 C480,4 600,60 720,32 L720,80 L0,80 Z"); }
+  100% { d: path("M0,32 C120,60 240,4 360,32 C480,60 600,4 720,32 L720,80 L0,80 Z"); }
+}
+
+/* ─── Top bar glass upgrade ────────────────────────────────── */
+.top-bar-awards {
+  background: rgba(255, 252, 244, 0.35) !important;
+  backdrop-filter: blur(32px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(160%) !important;
+  border: 0.5px solid rgba(255,255,255,.55) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 12px 40px -12px rgba(46,30,12,.22) !important;
+  transition: background 300ms var(--ease-glass), box-shadow 300ms var(--ease-glass) !important;
+}
+.top-bar-awards.scrolled {
+  background: rgba(255, 252, 244, 0.65) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.8) inset, 0 16px 48px -12px rgba(46,30,12,.28) !important;
+}
+
+/* ─── Dock glass upgrade ───────────────────────────────────── */
+.dock-awards {
+  background: rgba(255, 252, 244, 0.40) !important;
+  backdrop-filter: blur(32px) saturate(170%) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(170%) !important;
+  border: 0.5px solid rgba(255,255,255,.60) !important;
+  box-shadow:
+    0 2px 1px rgba(255,255,255,.85) inset,
+    0 -1px 1px rgba(0,0,0,.04) inset,
+    0 28px 70px -14px rgba(46,30,12,.32),
+    0 10px 28px -10px rgba(46,30,12,.18) !important;
+  transition: transform 400ms var(--ease-genie), background 300ms var(--ease-glass) !important;
+}
+
+/* ─── Custom cursor hint for awwwards feel ─────────────────── */
+.cursor-hint {
+  pointer-events: none;
+  position: fixed;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(245,165,36,0.25);
+  border: 1px solid rgba(245,165,36,0.45);
+  mix-blend-mode: difference;
+  transform: translate(-50%,-50%);
+  transition: width 200ms ease, height 200ms ease, background 200ms ease;
+  z-index: 9999;
+}
+@media (hover: none) {
+  .cursor-hint { display: none; }
 }

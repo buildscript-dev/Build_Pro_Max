@@ -4,6 +4,7 @@ import { accentColor } from '../data';
 import { useApp } from '../store/AppContext';
 import { clearSession, deleteAccount } from '../store/auth';
 import { connectGmail, disconnectGmail, isGmailConnected, getGmailEmail } from '../services/gmail';
+import { connectNotion, disconnectNotion, isNotionConnected, getNotionEmail, getNotionWorkspace } from '../services/notion';
 import { requestNotificationPermission } from '../services/clock';
 import { ScreenShell } from '../components/ui/ScreenShell';
 
@@ -21,6 +22,11 @@ export const Settings = ({ onShowAuth, onLogout: _onLogout }) => {
   const [gmailLoading, setGmailLoading] = useState(false);
   const [gmailClientId, setGmailClientId] = useState(() => { try { return localStorage.getItem('gmail_client_id') || ''; } catch { return ''; } });
   const [gmailApiKey, setGmailApiKey] = useState(() => { try { return localStorage.getItem('gmail_api_key') || ''; } catch { return ''; } });
+  const [notionConnected, setNotionConnected] = useState(isNotionConnected());
+  const [notionEmail, setNotionEmail] = useState(getNotionEmail());
+  const [notionWorkspace, setNotionWorkspace] = useState(getNotionWorkspace());
+  const [notionToken, setNotionToken] = useState(() => { try { return localStorage.getItem('notion_access_token') || ''; } catch { return ''; } });
+  const [notionLoading, setNotionLoading] = useState(false);
   const [notifStatus, setNotifStatus] = useState('');
   const [aiPrefs, setAiPrefs] = useState(() => {
     try { return JSON.parse(localStorage.getItem('ai_personality') || '{"voice":"background","autoPlan":true,"moodDetection":true,"relWatcher":true,"tone":"direct","role":""}'); }
@@ -58,6 +64,33 @@ export const Settings = ({ onShowAuth, onLogout: _onLogout }) => {
     setGmailConnected(false);
     setGmailEmail('');
     actions.addNotification({ text: 'Gmail disconnected', kind: 'info' });
+  };
+
+  const saveNotionToken = () => {
+    localStorage.setItem('notion_access_token', notionToken);
+    actions.addNotification({ text: 'Notion token saved. Click Connect to verify.', kind: 'info' });
+  };
+
+  const handleConnectNotion = async () => {
+    setNotionLoading(true);
+    const result = await connectNotion(notionToken);
+    if (result.ok) {
+      setNotionConnected(true);
+      setNotionEmail(result.email);
+      setNotionWorkspace(result.workspace);
+      actions.addNotification({ text: `Notion connected · ${result.workspace || result.email}`, kind: 'info' });
+    } else {
+      actions.addNotification({ text: result.error || 'Notion connection failed', kind: 'warning' });
+    }
+    setNotionLoading(false);
+  };
+
+  const handleDisconnectNotion = async () => {
+    disconnectNotion();
+    setNotionConnected(false);
+    setNotionEmail('');
+    setNotionWorkspace('');
+    actions.addNotification({ text: 'Notion disconnected', kind: 'info' });
   };
 
   const handleRequestNotif = async () => {
@@ -336,27 +369,85 @@ export const Settings = ({ onShowAuth, onLogout: _onLogout }) => {
 
                     <div className="hair" style={{ margin: "8px 0" }} />
 
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {["Google Calendar", "iCloud", "Slack", "Linear", "Notion"].map(svc => (
-                      <div key={svc} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 10, background: "rgba(255,252,244,.5)", border: "0.5px solid rgba(26,20,16,.06)" }}>
-                        <span style={{ fontWeight: 500 }}>{svc}</span>
-                        <span style={{ fontSize: 11, color: "var(--ink-3)" }}>○ Not connected</span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {/* Notion */}
+                      <div style={{ border: "0.5px solid var(--ink-line)", borderRadius: 12, overflow: "hidden" }}>
+                        <div style={{ padding: "14px 16px", background: "rgba(255,252,244,.4)" }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Notion</div>
+                          <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginBottom: 10, lineHeight: 1.5 }}>
+                            Get your Internal Integration Token from{' '}
+                            <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent-orange)" }}>
+                              notion.so/my-integrations
+                            </a>
+                            <br />Create a token, then share the integration with your workspace pages.
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            <input value={notionToken} onChange={(e) => setNotionToken(e.target.value)}
+                              placeholder="secret_xxxxxxxxxxxxxxxxxxxx"
+                              style={{ width: "100%", padding: "8px 12px", fontSize: 12, borderRadius: 8, border: "0.5px solid var(--ink-line)", background: "rgba(255,252,244,.7)", color: "var(--ink-1)", fontFamily: "var(--font-mono)", boxSizing: "border-box" }}
+                            />
+                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <PaperButton small onClick={saveNotionToken}>Save Token</PaperButton>
+                              {notionConnected ? (
+                                <PaperButton small onClick={handleDisconnectNotion}>Disconnect</PaperButton>
+                              ) : (
+                                <PaperButton small primary onClick={handleConnectNotion} disabled={notionLoading || !notionToken}>
+                                  {notionLoading ? 'Verifying…' : 'Connect'}
+                                </PaperButton>
+                              )}
+                            </div>
+                            {notionConnected && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--ok)" }}>
+                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--ok)", boxShadow: "0 0 4px var(--ok)" }} />
+                                Connected{notionWorkspace ? ` · ${notionWorkspace}` : ''}{notionEmail ? ` · ${notionEmail}` : ''}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    ))}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 10, background: "rgba(255,252,244,.5)", border: "0.5px solid rgba(26,20,16,.06)" }}>
-                      <div>
-                        <span style={{ fontWeight: 500 }}>Gmail</span>
-                        {gmailConnected && gmailEmail && <div style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 2 }}>{gmailEmail}</div>}
+
+                      {/* Gmail */}
+                      <div style={{ border: "0.5px solid var(--ink-line)", borderRadius: 12, overflow: "hidden" }}>
+                        <div style={{ padding: "14px 16px", background: "rgba(255,252,244,.4)" }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Gmail (Required)</div>
+                          <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginBottom: 10, lineHeight: 1.5 }}>
+                            To connect Gmail, create OAuth credentials at{' '}
+                            <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent-orange)" }}>
+                              Google Cloud Console
+                            </a>
+                            <br />Enable Gmail API, create a Web OAuth Client, and add your domain to Authorized JavaScript origins.
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            <input value={gmailClientId} onChange={(e) => setGmailClientId(e.target.value)}
+                              placeholder="OAuth 2.0 Client ID"
+                              style={{ width: "100%", padding: "8px 12px", fontSize: 12, borderRadius: 8, border: "0.5px solid var(--ink-line)", background: "rgba(255,252,244,.7)", color: "var(--ink-1)", fontFamily: "var(--font-mono)", boxSizing: "border-box" }}
+                            />
+                            <input value={gmailApiKey} onChange={(e) => setGmailApiKey(e.target.value)}
+                              placeholder="API Key (AIzaSy...)"
+                              style={{ width: "100%", padding: "8px 12px", fontSize: 12, borderRadius: 8, border: "0.5px solid var(--ink-line)", background: "rgba(255,252,244,.7)", color: "var(--ink-1)", fontFamily: "var(--font-mono)", boxSizing: "border-box" }}
+                            />
+                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <PaperButton small onClick={saveGmailCredentials}>Save Credentials</PaperButton>
+                              {gmailConnected ? (
+                                <PaperButton small onClick={handleDisconnectGmail}>Disconnect</PaperButton>
+                              ) : (
+                                <PaperButton small primary onClick={handleConnectGmail} disabled={gmailLoading}>
+                                  {gmailLoading ? 'Connecting…' : 'Connect'}
+                                </PaperButton>
+                              )}
+                            </div>
+                            {gmailConnected && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--ok)" }}>
+                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--ok)", boxShadow: "0 0 4px var(--ok)" }} />
+                                Connected{gmailEmail ? ` · ${gmailEmail}` : ''}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      {gmailConnected ? (
-                        <PaperButton small onClick={handleDisconnectGmail}>Disconnect</PaperButton>
-                      ) : (
-                        <PaperButton small primary onClick={handleConnectGmail} disabled={gmailLoading}>
-                          {gmailLoading ? 'Connecting…' : 'Connect'}
-                        </PaperButton>
-                      )}
-                    </div>
-                    <PaperButton small style={{ marginTop: 8 }} onClick={() => actions.addNotification({ text: 'More integrations coming soon', kind: 'info' })}>Connect new account</PaperButton>
+
+                      {/* More coming */}
+                      <PaperButton small style={{ marginTop: 4 }} onClick={() => actions.addNotification({ text: 'More integrations coming soon', kind: 'info' })}>Connect new account</PaperButton>
                     </div>
                   </div>
                 )}

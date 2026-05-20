@@ -13,6 +13,14 @@ export const Contacts = () => {
   const { state, actions } = useApp();
   const contacts = state.contacts || [];
   const [selId, setSelId] = useState(contacts[0]?.id || null);
+  const [syncing, setSyncing] = useState(false);
+  const [gmailEmails, setGmailEmails] = useState([]);
+  const [newContact, setNewContact] = useState({ name: '', role: '', tag: 'Network', color: 'amber' });
+  const [showAdd, setShowAdd] = useState(false);
+  const [editContact, setEditContact] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [aiDraft, setAiDraft] = useState('');
+  const [aiDraftLoading, setAiDraftLoading] = useState(false);
 
   const c = contacts.find(c => c.id === selId);
 
@@ -97,9 +105,21 @@ export const Contacts = () => {
     actions.addNotification({ text: `AI drafted email for ${c.name}`, kind: 'info' });
   };
 
-  const copyDraft = () => {
-    navigator.clipboard?.writeText(aiDraft);
-    actions.addNotification({ text: 'Draft copied to clipboard', kind: 'info' });
+  const copyDraft = async () => {
+    try {
+      await navigator.clipboard.writeText(aiDraft);
+      actions.addNotification({ text: 'Draft copied to clipboard', kind: 'info' });
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = aiDraft;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      actions.addNotification({ text: 'Draft copied', kind: 'info' });
+    }
   };
 
   const closeDraft = () => {

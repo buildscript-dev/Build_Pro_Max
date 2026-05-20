@@ -70,6 +70,10 @@ function freshState() {
       paperWarmth: 1,
       grain: 0.45,
       ambient: 1,
+      focusMode: 'off',
+      focusHideDock: true,
+      focusHideTopbar: false,
+      focusTimer: 0,
     },
     nextNoteId: 7,
     nextTaskId: 9,
@@ -390,6 +394,10 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
   const [state, dispatch] = useReducer(reducer, saved || freshState());
   const [bootDone, setBootDone] = useState(false);
   const [authUser, setAuthUser] = useState(initialAuthUser);
+
+  useEffect(() => {
+    if (initialAuthUser) setAuthUser(initialAuthUser);
+  }, [initialAuthUser]);
 
   useEffect(() => {
     const id = setTimeout(() => setBootDone(true), 1100);

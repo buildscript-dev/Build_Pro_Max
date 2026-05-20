@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { AppProvider } from './store/AppContext'
 import { getSession } from './store/auth'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { SmoothScroll } from './components/effects/SmoothScroll'
 import App from './App.jsx'
 import './index.css'
 
@@ -78,7 +79,9 @@ function Root() {
   return (
     <AppProvider authUser={authUser} setAuthUser={handleAuth} onLogout={handleLogout}>
       <ErrorBoundary>
-        <App />
+        <SmoothScroll>
+          <App />
+        </SmoothScroll>
       </ErrorBoundary>
     </AppProvider>
   );

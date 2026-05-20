@@ -1,4 +1,4 @@
-import React, { useEffect, useState, lazy, Suspense } from 'react';
+import React, { useEffect, useState, lazy, Suspense, useRef } from 'react';
 import { useApp } from './store/AppContext';
 import { CmdK } from './components/command/CmdK';
 import { Dock, TopBar } from './components/navigation/Dock';
@@ -6,6 +6,11 @@ import { BottomNav } from './components/navigation/BottomNav';
 import { AiOrb } from './components/ui/Icons';
 import { Dashboard } from './screens/Dashboard';
 import { Auth } from './screens/Auth';
+import { clearSession } from './store/auth';
+import { AmbientVideo } from './components/effects/AmbientVideo';
+import { PageTransition } from './components/effects/PageTransition';
+import { FocusPanel } from './components/focus/FocusPanel';
+import { FocusToggle } from './components/focus/FocusToggle';
 
 const AiChat = lazy(() => import('./screens/AiChat').then(m => ({ default: m.AiChat })));
 const Calendar = lazy(() => import('./screens/Calendar').then(m => ({ default: m.Calendar })));
@@ -57,19 +62,25 @@ function BootSplash() {
 
 export default function App() {
   const { state, actions, bootDone, authUser, setAuthUser, onLogout } = useApp();
-  const [showAuth, setShowAuth] = useState(false);
+  const [showAuth, setShowAuth] = useState(!authUser);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [screen, setScreen] = useState('dashboard');
   const [cmdkOpen, setCmdkOpen] = useState(false);
+  const [focusOpen, setFocusOpen] = useState(false);
+  const [topBarScrolled, setTopBarScrolled] = useState(false);
+  const contentRef = useRef(null);
 
-  // Expose navigation for agentic AI
   useEffect(() => {
     window.__opencode = { onNavigate: setScreen, actions };
     return () => { delete window.__opencode; };
   }, [actions]);
 
+  useEffect(() => {
+    if (authUser) setShowAuth(false);
+  }, [authUser]);
+
   const t = state.tweaks;
 
-  // Sync auth user into app state on mount
   useEffect(() => {
     if (authUser && state.user) {
       const initials = authUser.name ? authUser.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : authUser.email[0].toUpperCase();
@@ -79,8 +90,34 @@ export default function App() {
         avatar: initials,
         handle: '@' + (authUser.name || authUser.email.split('@')[0]).toLowerCase().replace(/\s+/g, ''),
       });
+
+      const onboardingDone = localStorage.getItem('onboarding_complete');
+      if (!onboardingDone) {
+        setShowOnboarding(true);
+      }
     }
-  }, []); // only on mount
+  }, [authUser]);
+
+  const handleLogout = () => {
+    clearSession();
+    onLogout();
+    setShowAuth(true);
+    setShowOnboarding(false);
+    setScreen('dashboard');
+  };
+
+  const handleAuth = (user) => {
+    setAuthUser(user);
+    setShowAuth(false);
+  };
+
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+  };
+
+  const handleSetFocusMode = (mode) => {
+    actions.setTweak('focusMode', mode);
+  };
 
   useEffect(() => {
     if (!t) return;
@@ -102,6 +139,10 @@ export default function App() {
     root.style.setProperty('--motion-quick', `${180 * k}ms`);
     root.style.setProperty('--motion-mid', `${360 * k}ms`);
     root.style.setProperty('--motion-slow', `${620 * k}ms`);
+
+    document.body.classList.toggle('focus-learner', t.focusMode === 'learner');
+    document.body.classList.toggle('focus-execution', t.focusMode === 'execution');
+    document.body.classList.toggle('focus-active', t.focusMode !== 'off');
   }, [t]);
 
   useEffect(() => {
@@ -144,6 +185,15 @@ export default function App() {
     document.title = labels[screen] || 'Build_PRO_MAX_1';
   }, [screen]);
 
+  // Detect scroll for top bar glass upgrade
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const onScroll = () => setTopBarScrolled(el.scrollTop > 20);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [screen]);
+
   const hasNotifications = state.notifications?.some(n => !n.read);
 
   const isAuthConnected = !!authUser;
@@ -156,35 +206,40 @@ export default function App() {
     contacts: Contacts,
     files: Files,
     chat: AiChat,
-    settings: (props) => <Settings {...props} onShowAuth={() => setShowAuth(true)} />,
+    settings: (props) => <Settings {...props} onShowAuth={() => setShowAuth(true)} onLogout={handleLogout} />,
     onboarding: Onboarding,
   };
 
   return (
     <>
       <div className={`paper ${t.canvas === 'mono' ? 'mono' : ''}`} />
-      {/* liquid-fx SVG removed — feTurbulence+feDisplacementMap was the #1 GPU bottleneck.
-           The warm gradient atmosphere is now handled by the ambient orbs + paper canvas. */}
+      <div className="gradient-mesh" aria-hidden="true" />
+      <div className="noise-overlay" aria-hidden="true" />
+      <AmbientVideo />
 
       <div className="ambient" aria-hidden="true">
         <div className="orb o1" />
         <div className="orb o2" />
-        {/* orbs o3 & o4 removed — were the largest GPU cost elements */}
       </div>
       <div className="paper-edge" />
 
       <div
+        ref={contentRef}
         data-screen-label={`Screen · ${screen}`}
+        className="scroll"
         style={{
           position: 'fixed',
           inset: 0,
           opacity: bootDone ? 1 : 0,
           transform: bootDone ? 'scale(1)' : 'scale(1.02)',
           transition: 'opacity 600ms ease-out, transform 600ms var(--ease-glass)',
+          overflowY: 'auto',
         }}
       >
         <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--ink-3)' }}>Loading…</div>}>
-          {React.createElement(SCREENS[screen] || Dashboard, { onNavigate: setScreen })}
+          <PageTransition screenKey={screen}>
+            {React.createElement(SCREENS[screen] || Dashboard, { onNavigate: setScreen })}
+          </PageTransition>
         </Suspense>
       </div>
 
@@ -195,36 +250,95 @@ export default function App() {
           background: 'rgba(246,241,229,.85)', backdropFilter: 'blur(8px)',
           animation: 'expand-fade 200ms var(--ease-glass)',
         }}>
-          <Auth onAuth={(user) => { setShowAuth(false); typeof setAuthUser === 'function' && setAuthUser(user); }} />
+          <Auth onAuth={handleAuth} />
         </div>
       )}
 
-      <TopBar
-        user={state.user}
-        today={state.today}
-        onOpenCmdK={() => setCmdkOpen(true)}
-        variant={t.nav}
-        active={screen}
-        onSelect={setScreen}
-        hasNotifications={hasNotifications}
-        onClearNotifications={actions.clearNotifications}
-        onMarkAllRead={actions.markAllNotificationsRead}
-        notifications={state.notifications}
-      />
-      <Dock
-        active={screen}
-        onSelect={setScreen}
-        variant={t.nav}
-        onOpenCmdK={() => setCmdkOpen(true)}
-        hasNotifications={hasNotifications}
-      />
-      <BottomNav
-        active={screen}
-        onSelect={setScreen}
-        onOpenCmdK={() => setCmdkOpen(true)}
-        hasNotifications={hasNotifications}
-      />
+      {showOnboarding && authUser && (
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--ink-3)', background: 'var(--paper-0)' }}>Loading onboarding…</div>}>
+          <Onboarding onComplete={handleOnboardingComplete} />
+        </Suspense>
+      )}
+
+      {t.focusMode !== 'execution' && (
+        <TopBar
+          user={state.user}
+          today={state.today}
+          onOpenCmdK={() => setCmdkOpen(true)}
+          variant={t.nav}
+          active={screen}
+          onSelect={setScreen}
+          hasNotifications={hasNotifications}
+          onClearNotifications={actions.clearNotifications}
+          onMarkAllRead={actions.markAllNotificationsRead}
+          notifications={state.notifications}
+          scrolled={topBarScrolled}
+        />
+      )}
+      {t.focusMode !== 'execution' && (
+        <Dock
+          active={screen}
+          onSelect={setScreen}
+          variant={t.nav}
+          onOpenCmdK={() => setCmdkOpen(true)}
+          onOpenFocus={() => setFocusOpen(true)}
+          focusMode={t.focusMode}
+          hasNotifications={hasNotifications}
+        />
+      )}
+      {t.focusMode !== 'execution' && (
+        <BottomNav
+          active={screen}
+          onSelect={setScreen}
+          onOpenCmdK={() => setCmdkOpen(true)}
+          hasNotifications={hasNotifications}
+        />
+      )}
       <CmdK open={cmdkOpen} onClose={() => setCmdkOpen(false)} onNavigate={setScreen} />
+
+      {t.focusMode !== 'off' && (
+        <div style={{
+          position: 'fixed', bottom: t.focusMode === 'execution' ? 20 : 'auto', top: t.focusMode !== 'execution' ? 14 : 'auto',
+          left: '50%', transform: 'translateX(-50%)', zIndex: 100,
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '6px 14px 6px 16px',
+          borderRadius: 999,
+          background: t.focusMode === 'execution' ? 'rgba(26,20,16,.86)' : 'rgba(255,252,244,.7)',
+          backdropFilter: 'blur(16px)',
+          border: '0.5px solid rgba(255,255,255,.15)',
+          boxShadow: '0 4px 16px rgba(0,0,0,.15)',
+          animation: 'fade-in 300ms ease both',
+        }}>
+          <div style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: t.focusMode === 'execution' ? 'var(--accent-coral)' : 'var(--info)',
+            boxShadow: `0 0 6px ${t.focusMode === 'execution' ? 'var(--accent-coral)' : 'var(--info)'}`,
+          }} />
+          <span style={{
+            fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em',
+            color: t.focusMode === 'execution' ? '#fff8e8' : 'var(--ink-2)',
+          }}>
+            {t.focusMode === 'learner' ? 'Learner' : t.focusMode === 'execution' ? 'Execution' : 'Focus'}
+          </span>
+          <button onClick={() => setFocusOpen(true)}
+            style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, color: t.focusMode === 'execution' ? 'rgba(255,255,255,.6)' : 'var(--ink-3)', marginLeft: 4 }}>
+            Settings
+          </button>
+          <button onClick={() => handleSetFocusMode('off')}
+            style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, color: t.focusMode === 'execution' ? 'rgba(255,165,36,.8)' : 'var(--accent-coral)', fontWeight: 600 }}>
+            Exit
+          </button>
+        </div>
+      )}
+
+      {focusOpen && (
+        <FocusPanel
+          focusMode={t.focusMode}
+          onSetMode={handleSetFocusMode}
+          onNavigate={setScreen}
+          onClose={() => setFocusOpen(false)}
+        />
+      )}
       {!bootDone && <BootSplash />}
     </>
   );

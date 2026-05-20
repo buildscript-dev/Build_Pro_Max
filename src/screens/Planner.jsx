@@ -4,6 +4,7 @@ import { accentColor } from '../data';
 import { useApp } from '../store/AppContext';
 import { generateAiResponse } from '../services/ai';
 import { formatDate, getCurrentTime } from '../services/clock';
+import { ScreenGuide } from '../components/ui/ScreenGuide';
 
 const ScreenShell = ({ title, eyebrow, subtitle, right, children, padTop = 86, padBottom = 110 }) => (
   <div className="scroll" style={{

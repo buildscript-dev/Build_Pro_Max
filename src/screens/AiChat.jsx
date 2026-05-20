@@ -3,6 +3,7 @@ import { GlassCard, PaperButton, Icon, AiOrb, Avatar } from '../components/ui/Ic
 import { useApp } from '../store/AppContext';
 import { generateAiResponse, fetchAndSummarizeUrl } from '../services/ai';
 import { ScreenShell } from '../components/ui/ScreenShell';
+import { ScreenGuide } from '../components/ui/ScreenGuide';
 
 export const AiChat = () => {
   const { state, actions } = useApp();
@@ -193,6 +194,7 @@ export const AiChat = () => {
       title={<>Talk to <span className="t-display-italic" style={{ color: "var(--accent-orange)" }}>your AI</span>.</>}
       subtitle={<>The same AI that lives in your inbox, planner, and notes. It already knows your week.</>}
     >
+      <ScreenGuide screen="chat" />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, height: "calc(100vh - 280px)", minHeight: 540 }}>
         <GlassCard strong padding={0} style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div className="scroll" style={{ flex: 1, overflowY: "auto", padding: "30px 36px", display: "flex", flexDirection: "column", gap: 20 }}>

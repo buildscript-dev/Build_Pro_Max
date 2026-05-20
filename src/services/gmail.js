@@ -1,8 +1,7 @@
 const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
 
 let tokenClient = null;
-let gapiInited = false;
-let gisInited = false;
+let initPromise = null;
 
 export function isGmailConnected() {
   try {
@@ -16,61 +15,72 @@ export function getGmailEmail() {
   } catch { return ''; }
 }
 
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (src.includes('api.js') && window.gapi) { resolve(); return; }
+    if (src.includes('gsi/client') && window.google?.accounts) { resolve(); return; }
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      existing.addEventListener('load', resolve, { once: true });
+      existing.addEventListener('error', reject, { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
 export async function initGmailClient() {
-  if (gapiInited && gisInited) return true;
+  if (initPromise) return initPromise;
 
   const clientId = localStorage.getItem('gmail_client_id');
   const apiKey = localStorage.getItem('gmail_api_key');
 
-  if (!clientId || !apiKey) return false;
-
-  try {
-    await loadGapi();
-    await loadGis();
-
-    await new Promise((resolve, reject) => {
-      gapi.load('client', { callback: resolve, onerror: reject });
-    });
-
-    await gapi.client.init({ apiKey, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest'] });
-    gapiInited = true;
-
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: GMAIL_SCOPE,
-      callback: (resp) => {
-        if (resp.access_token) {
-          localStorage.setItem('gmail_access_token', resp.access_token);
-        }
-      },
-    });
-    gisInited = true;
-    return true;
-  } catch {
+  if (!clientId || !apiKey) {
+    initPromise = Promise.resolve(false);
     return false;
   }
-}
 
-function loadGapi() {
-  return new Promise((resolve, reject) => {
-    if (window.gapi) { resolve(); return; }
-    const script = document.createElement('script');
-    script.src = 'https://apis.google.com/js/api.js';
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-}
+  initPromise = (async () => {
+    try {
+      await loadScript('https://apis.google.com/js/api.js');
+      await loadScript('https://accounts.google.com/gsi/client');
 
-function loadGis() {
-  return new Promise((resolve, reject) => {
-    if (window.google?.accounts) { resolve(); return; }
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
+      await new Promise((resolve, reject) => {
+        if (window.gapi?.client) { resolve(); return; }
+        gapi.load('client', { callback: resolve, onerror: reject });
+      });
+
+      if (!gapi.client.getToken) {
+        await gapi.client.init({ apiKey, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest'] });
+      }
+
+      const savedToken = localStorage.getItem('gmail_access_token');
+      if (savedToken) {
+        gapi.client.setToken({ access_token: savedToken });
+      }
+
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: GMAIL_SCOPE,
+        callback: (resp) => {
+          if (resp.access_token) {
+            localStorage.setItem('gmail_access_token', resp.access_token);
+            gapi.client.setToken({ access_token: resp.access_token });
+          }
+        },
+      });
+      return true;
+    } catch {
+      initPromise = null;
+      return false;
+    }
+  })();
+
+  return initPromise;
 }
 
 export async function connectGmail() {

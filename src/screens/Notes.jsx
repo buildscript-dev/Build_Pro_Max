@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb } from '../components/ui/Icons';
 import { useApp } from '../store/AppContext';
 import { ScreenShell } from '../components/ui/ScreenShell';
+import { ScreenGuide } from '../components/ui/ScreenGuide';
 
 const TAGS = ['Fundraise', 'Hiring', 'Network', 'Pages', 'Reading', 'Product', 'General', 'Inbox', 'Design', 'Engineering', 'Gym', 'Personal'];
 
@@ -433,6 +434,7 @@ export const Notes = () => {
         <PaperButton icon="plus" primary onClick={createEmptyNote}>New note</PaperButton>
       </>}
     >
+      <ScreenGuide screen="notes" />
       <div style={{ display: "grid", gridTemplateColumns: "320px 1fr 280px", gap: 16, height: "calc(100vh - 280px)", minHeight: 600 }}>
         
         {/* Left Side: Notes list */}
