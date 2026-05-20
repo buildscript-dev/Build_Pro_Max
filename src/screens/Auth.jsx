@@ -197,6 +197,23 @@ export const Auth = ({ onAuth }) => {
                   Continue with Google
                 </button>
 
+                <button
+                  type="button"
+                  onClick={() => onAuth({ id: 'dev_user', email: 'dev@local.host', name: 'Dev User', avatar: 'DV' })}
+                  disabled={loading}
+                  style={{
+                    marginTop: 10,
+                    width: '100%', height: 42, borderRadius: 10,
+                    border: '1px dashed var(--ink-line)',
+                    background: 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 13, color: 'var(--ink-2)', fontWeight: 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Skip Login (Dev Mode)
+                </button>
+
                 <div style={{ marginTop: 20, textAlign: 'center', fontSize: 12.5, color: 'var(--ink-3)' }}>
                   {mode === 'login' ? (
                     <>Don't have an account?{' '}<button type="button" onClick={() => { setMode('signup'); setError(''); }} style={{ color: 'var(--accent-orange)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}>Sign up</button></>
