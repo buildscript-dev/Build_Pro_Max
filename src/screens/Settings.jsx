@@ -5,44 +5,39 @@ import { useApp } from '../store/AppContext';
 import { clearSession, deleteAccount } from '../store/auth';
 import { connectGmail, disconnectGmail, isGmailConnected, getGmailEmail } from '../services/gmail';
 import { requestNotificationPermission } from '../services/clock';
-
-const ScreenShell = ({ title, eyebrow, subtitle, children, padTop = 86, padBottom = 110 }) => (
-  <div className="scroll" style={{
-    position: "absolute", inset: 0, paddingTop: padTop, paddingBottom: padBottom,
-    paddingLeft: 36, paddingRight: 36, overflowY: "auto",
-  }}>
-    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 28, paddingLeft: 6, paddingRight: 6 }}>
-      <div>
-        {eyebrow && <div className="t-cap" style={{ marginBottom: 8, color: "var(--accent-orange)" }}>{eyebrow}</div>}
-        <h1 className="t-display" style={{ margin: 0, fontSize: 52, fontWeight: 400, letterSpacing: "-0.025em", lineHeight: 1.02 }}>
-          {title}
-        </h1>
-        {subtitle && <div style={{ marginTop: 10, fontSize: 14, color: "var(--ink-2)", maxWidth: 720 }}>{subtitle}</div>}
-      </div>
-    </div>
-    {children}
-  </div>
-);
+import { ScreenShell } from '../components/ui/ScreenShell';
 
 const NAV_BASE = ['Profile', 'Appearance', 'AI behavior', 'Connected accounts', 'Devices', 'Notifications', 'Privacy', 'Keyboard', 'About'];
 
-export const Settings = ({ onLogout }) => {
-  const { state, actions, authUser } = useApp();
+export const Settings = ({ onShowAuth, onLogout: _onLogout }) => {
+  const { state, actions, authUser, onLogout: ctxLogout } = useApp();
   const { user, tweaks } = state;
-  const [activeSection, setActiveSection] = useState('Appearance');
+  const [activeSection, setActiveSection] = useState(authUser ? 'Appearance' : 'Account');
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileData, setProfileData] = useState({ ...user });
   const [apiKey, setApiKey] = useState(() => { try { return localStorage.getItem('openrouter_api_key') || ''; } catch { return ''; } });
   const [gmailConnected, setGmailConnected] = useState(isGmailConnected());
   const [gmailEmail, setGmailEmail] = useState(getGmailEmail());
   const [gmailLoading, setGmailLoading] = useState(false);
+  const [gmailClientId, setGmailClientId] = useState(() => { try { return localStorage.getItem('gmail_client_id') || ''; } catch { return ''; } });
+  const [gmailApiKey, setGmailApiKey] = useState(() => { try { return localStorage.getItem('gmail_api_key') || ''; } catch { return ''; } });
   const [notifStatus, setNotifStatus] = useState('');
+  const [aiPrefs, setAiPrefs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('ai_personality') || '{"voice":"background","autoPlan":true,"moodDetection":true,"relWatcher":true,"tone":"direct","role":""}'); }
+    catch { return { voice: 'background', autoPlan: true, moodDetection: true, relWatcher: true, tone: 'direct', role: '' }; }
+  });
 
-  const NAV_ITEMS = authUser ? [...NAV_BASE, 'Account'] : NAV_BASE;
+  const NAV_ITEMS = authUser ? [...NAV_BASE, 'Account'] : [...NAV_BASE, 'Sign in'];
 
   const saveApiKey = () => {
     localStorage.setItem('openrouter_api_key', apiKey);
     actions.addNotification({ text: 'AI API key saved', kind: 'info' });
+  };
+
+  const saveGmailCredentials = () => {
+    localStorage.setItem('gmail_client_id', gmailClientId);
+    localStorage.setItem('gmail_api_key', gmailApiKey);
+    actions.addNotification({ text: 'Gmail credentials saved. Click Connect to authorize.', kind: 'info' });
   };
 
   const handleConnectGmail = async () => {
@@ -73,13 +68,15 @@ export const Settings = ({ onLogout }) => {
 
   const handleLogout = () => {
     clearSession();
-    window.location.reload();
+    if (ctxLogout) ctxLogout();
   };
 
   const handleDeleteAccount = async () => {
     if (window.confirm('Are you sure? This will permanently delete your account and all local data.')) {
       await deleteAccount(authUser?.email || '');
-      localStorage.clear();
+      // Only clear app-specific keys, not all localStorage
+      const appKeys = ['build_pro_max_1_state', 'auth_session', 'auth_users', 'openrouter_api_key', 'ai_personality', 'gmail_token', 'gmail_email'];
+      appKeys.forEach(key => localStorage.removeItem(key));
       window.location.reload();
     }
   };
@@ -127,7 +124,7 @@ export const Settings = ({ onLogout }) => {
               fontWeight: activeSection === s ? 600 : 500,
               borderBottom: i < NAV_ITEMS.length - 1 ? "0.5px solid var(--ink-line)" : "none",
               boxShadow: activeSection === s ? "inset 3px 0 0 var(--accent-orange)" : "none",
-              cursor: "default",
+              cursor: "pointer",
             }}>{s}</div>
           ))}
         </GlassCard>
@@ -225,20 +222,55 @@ export const Settings = ({ onLogout }) => {
               <div className="t-cap">AI behavior</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 0, marginTop: 6 }}>
                 {[
-                  { label: "Voice", sub: "How present the AI feels in your day.", val: "Background — quietly observes, surfaces inline" },
-                  { label: "Auto-plan", sub: "AI rebalances your day when blocks slip.", val: "On · ask before moving > 30 min blocks" },
-                  { label: "Pages mood detection", sub: "Surface patterns from your journaling.", val: "On" },
-                  { label: "Relationship watcher", sub: "Notice contact warmth decay.", val: "On" },
-                ].map((row, i) => (
-                  <div key={i} style={{ padding: "14px 0", display: "grid", gridTemplateColumns: "200px 1fr auto", gap: 14, alignItems: "center", borderBottom: i < 3 ? "0.5px solid var(--ink-line)" : "none" }}>
-                    <div>
-                      <div style={{ fontSize: 13.5, fontWeight: 500 }}>{row.label}</div>
-                      <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>{row.sub}</div>
+                  { key: 'tone', label: "Voice", sub: "How the AI talks to you.", val: ({ tone }) => `"${tone}" mode` },
+                  { key: 'autoPlan', label: "Auto-plan", sub: "AI rebalances your day when blocks slip.", val: ({ autoPlan }) => autoPlan ? 'On' : 'Off' },
+                  { key: 'moodDetection', label: "Pages mood detection", sub: "Surface patterns from your journaling.", val: ({ moodDetection }) => moodDetection ? 'On' : 'Off' },
+                  { key: 'relWatcher', label: "Relationship watcher", sub: "Notice contact warmth decay.", val: ({ relWatcher }) => relWatcher ? 'On' : 'Off' },
+                ].map((row) => {
+                  const current = row.key === 'tone' ? aiPrefs.tone || 'direct' : aiPrefs[row.key];
+                  const display = typeof row.val === 'function' ? row.val(aiPrefs) : current;
+                  const toggle = () => {
+                    const next = { ...aiPrefs };
+                    if (row.key === 'tone') {
+                      const modes = ['direct', 'polite', 'brutal'];
+                      const idx = modes.indexOf(next.tone);
+                      next.tone = modes[(idx + 1) % modes.length];
+                    } else {
+                      next[row.key] = !next[row.key];
+                    }
+                    setAiPrefs(next);
+                    localStorage.setItem('ai_personality', JSON.stringify(next));
+                    actions.addNotification({ text: `${row.label}: ${typeof next[row.key] === 'boolean' ? (next[row.key] ? 'On' : 'Off') : next.tone}`, kind: 'info' });
+                  };
+                  return (
+                    <div key={row.key} style={{ padding: "14px 0", display: "grid", gridTemplateColumns: "200px 1fr auto", gap: 14, alignItems: "center", borderBottom: row.key !== 'relWatcher' ? "0.5px solid var(--ink-line)" : "none" }}>
+                      <div>
+                        <div style={{ fontSize: 13.5, fontWeight: 500 }}>{row.label}</div>
+                        <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>{row.sub}</div>
+                      </div>
+                      <div style={{ fontSize: 13, color: "var(--ink-2)" }}>{String(display)}</div>
+                      <PaperButton small onClick={toggle}>{row.key === 'tone' ? 'Cycle' : 'Toggle'}</PaperButton>
                     </div>
-                    <div style={{ fontSize: 13, color: "var(--ink-2)" }}>{row.val}</div>
-                    <PaperButton small onClick={() => actions.addNotification({ text: `${row.label} setting toggled`, kind: 'info' })}>Toggle</PaperButton>
+                  );
+                })}
+                <div className="hair" style={{ margin: "16px 0" }} />
+                <div style={{ padding: "14px 0" }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 500 }}>Your role (for AI context)</div>
+                  <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2, marginBottom: 10 }}>
+                    Tell the AI what you do so it gives better advice.
                   </div>
-                ))}
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input value={aiPrefs.role || ''}
+                      onChange={(e) => setAiPrefs({ ...aiPrefs, role: e.target.value })}
+                      placeholder="e.g. founder shipping a product, fundraising"
+                      style={{ flex: 1, padding: "8px 12px", fontSize: 13, borderRadius: 8, border: "0.5px solid var(--ink-line)", background: "rgba(255,252,244,.7)", color: "var(--ink-1)" }}
+                    />
+                    <PaperButton small primary onClick={() => {
+                      localStorage.setItem('ai_personality', JSON.stringify(aiPrefs));
+                      actions.addNotification({ text: 'AI personality saved', kind: 'info' });
+                    }}>Save</PaperButton>
+                  </div>
+                </div>
                 <div className="hair" style={{ margin: "16px 0" }} />
                 <div style={{ padding: "14px 0" }}>
                   <div style={{ fontSize: 13.5, fontWeight: 500 }}>OpenRouter API Key</div>
@@ -258,12 +290,53 @@ export const Settings = ({ onLogout }) => {
             </GlassCard>
           )}
 
+          {activeSection === 'Sign in' && !authUser && onShowAuth && (
+            <GlassCard>
+              <div className="t-cap">Sign in</div>
+              <div style={{ marginTop: 14, fontSize: 13.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
+                <p>Sign in to sync your data across devices and connect to cloud services.</p>
+                <PaperButton primary onClick={onShowAuth} icon="arrow" style={{ marginTop: 12 }}>Sign in / Create account</PaperButton>
+              </div>
+            </GlassCard>
+          )}
+
           {(activeSection === 'Connected accounts' || activeSection === 'Devices' || activeSection === 'Notifications' || activeSection === 'Privacy' || activeSection === 'Keyboard' || activeSection === 'About') && (
             <GlassCard>
               <div className="t-cap">{activeSection}</div>
               <div style={{ marginTop: 14, fontSize: 13.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
                 {activeSection === 'Connected accounts' && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Gmail Setup (Required)</div>
+                      <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginBottom: 12, lineHeight: 1.5 }}>
+                        To connect Gmail, you need a Google Cloud project with Gmail API enabled.
+                        <br />
+                        <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent-orange)" }}>
+                          → Create OAuth credentials here
+                        </a>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        <div>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: "var(--ink-2)", display: "block", marginBottom: 4 }}>OAuth 2.0 Client ID</label>
+                          <input value={gmailClientId} onChange={(e) => setGmailClientId(e.target.value)}
+                            placeholder="123456-abcdef.apps.googleusercontent.com"
+                            style={{ width: "100%", padding: "8px 12px", fontSize: 12, borderRadius: 8, border: "0.5px solid var(--ink-line)", background: "rgba(255,252,244,.7)", color: "var(--ink-1)", fontFamily: "var(--font-mono)", boxSizing: "border-box" }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: "var(--ink-2)", display: "block", marginBottom: 4 }}>API Key</label>
+                          <input value={gmailApiKey} onChange={(e) => setGmailApiKey(e.target.value)}
+                            placeholder="AIzaSy..."
+                            style={{ width: "100%", padding: "8px 12px", fontSize: 12, borderRadius: 8, border: "0.5px solid var(--ink-line)", background: "rgba(255,252,244,.7)", color: "var(--ink-1)", fontFamily: "var(--font-mono)", boxSizing: "border-box" }}
+                          />
+                        </div>
+                        <PaperButton small primary onClick={saveGmailCredentials}>Save Credentials</PaperButton>
+                      </div>
+                    </div>
+
+                    <div className="hair" style={{ margin: "8px 0" }} />
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {["Google Calendar", "iCloud", "Slack", "Linear", "Notion"].map(svc => (
                       <div key={svc} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 10, background: "rgba(255,252,244,.5)", border: "0.5px solid rgba(26,20,16,.06)" }}>
                         <span style={{ fontWeight: 500 }}>{svc}</span>
@@ -284,6 +357,7 @@ export const Settings = ({ onLogout }) => {
                       )}
                     </div>
                     <PaperButton small style={{ marginTop: 8 }} onClick={() => actions.addNotification({ text: 'More integrations coming soon', kind: 'info' })}>Connect new account</PaperButton>
+                    </div>
                   </div>
                 )}
                 {activeSection === 'Devices' && (
@@ -315,6 +389,15 @@ export const Settings = ({ onLogout }) => {
                     {[
                       { key: '⌘K', action: 'Open command bar' },
                       { key: 'Escape', action: 'Close modals / dialogs' },
+                      { key: '1', action: 'Dashboard' },
+                      { key: '2', action: 'Planner' },
+                      { key: '3', action: 'Notes' },
+                      { key: '4', action: 'Calendar' },
+                      { key: '5', action: 'Tasks' },
+                      { key: '6', action: 'Contacts' },
+                      { key: '7', action: 'Files' },
+                      { key: '8', action: 'AI Chat' },
+                      { key: '9', action: 'Settings' },
                       { key: '↑↓', action: 'Navigate lists' },
                       { key: 'Enter', action: 'Confirm / select' },
                     ].map(({ key, action }) => (

@@ -1,0 +1,26 @@
+{
+  "name": "Build_PRO_MAX_1",
+  "short_name": "Build",
+  "description": "An execution OS for founders shipping product, fundraising, and hiring.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f1e5",
+  "theme_color": "#f6f1e5",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/liquid_glass.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/liquid_glass.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "lang": "en"
+}

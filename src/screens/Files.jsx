@@ -1,25 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb } from '../components/ui/Icons';
 import { useApp } from '../store/AppContext';
-
-const ScreenShell = ({ title, eyebrow, subtitle, right, children, padTop = 86, padBottom = 110 }) => (
-  <div className="scroll" style={{
-    position: "absolute", inset: 0, paddingTop: padTop, paddingBottom: padBottom,
-    paddingLeft: 36, paddingRight: 36, overflowY: "auto",
-  }}>
-    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 28, paddingLeft: 6, paddingRight: 6 }}>
-      <div>
-        {eyebrow && <div className="t-cap" style={{ marginBottom: 8, color: "var(--accent-orange)" }}>{eyebrow}</div>}
-        <h1 className="t-display" style={{ margin: 0, fontSize: 52, fontWeight: 400, letterSpacing: "-0.025em", lineHeight: 1.02 }}>
-          {title}
-        </h1>
-        {subtitle && <div style={{ marginTop: 10, fontSize: 14, color: "var(--ink-2)", maxWidth: 720 }}>{subtitle}</div>}
-      </div>
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>{right}</div>
-    </div>
-    {children}
-  </div>
-);
+import { ScreenShell } from '../components/ui/ScreenShell';
 
 const FILE_KINDS = ['pdf', 'fig', 'sheet', 'img', 'audio'];
 const DEVICE_NAMES = ['MacBook Pro', 'iPhone 15', 'iPad Pro', 'Studio (Mac mini)'];
@@ -30,20 +12,24 @@ export const Files = () => {
   const devices = state.devices || [];
   const [showAdd, setShowAdd] = useState(false);
   const [newFile, setNewFile] = useState({ name: '', from: DEVICE_NAMES[0], to: DEVICE_NAMES[1], size: '1 MB', kind: 'pdf' });
+  const filesRef = useRef(files);
 
-  // Simulate progress for in-flight transfers
+  // Keep ref in sync with latest files
+  useEffect(() => { filesRef.current = files; }, [files]);
+
+  // Simulate progress for in-flight transfers — stable interval, reads from ref
   useEffect(() => {
     const iv = setInterval(() => {
-      files.forEach(f => {
+      filesRef.current.forEach(f => {
         if (f.progress < 100) {
           const inc = Math.random() * 15 + 2;
           const next = Math.min(100, f.progress + inc);
-          actions.updateFileProgress(f.name, Math.round(next));
+          actions.updateFileProgress(f.id || f.name, Math.round(next));
         }
       });
     }, 2000);
     return () => clearInterval(iv);
-  }, [files, actions]);
+  }, [actions]);
 
   const addTransfer = () => {
     if (!newFile.name.trim()) return;
@@ -162,10 +148,10 @@ export const Files = () => {
         <GlassCard>
           <div className="t-cap">Active transfers · {files.filter(f => f.progress < 100).length} in flight</div>
           <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-            {files.map((f, i) => (
-              <div key={i} style={{
+            {files.map((f) => (
+              <div key={f.id} style={{
                 display: "grid", gridTemplateColumns: "36px 1fr auto 60px auto", gap: 14, alignItems: "center",
-                padding: "10px 0", borderBottom: i < files.length - 1 ? "0.5px solid var(--ink-line)" : "none",
+                padding: "10px 0", borderBottom: f.id !== files[files.length - 1].id ? "0.5px solid var(--ink-line)" : "none",
               }}>
                 <div style={{
                   width: 36, height: 36, borderRadius: 8,
@@ -197,7 +183,7 @@ export const Files = () => {
                   )}
                 </div>
                 <span className="t-mono" style={{ fontSize: 11, color: "var(--ink-3)", textAlign: "right" }}>{f.progress}%</span>
-                <button onClick={() => actions.removeFile(f.name)} aria-label={`Remove ${f.name}`} style={{ fontSize: 10, color: "var(--ink-4)", padding: "2px 6px" }}>✕</button>
+                <button onClick={() => actions.removeFile(f.id)} aria-label={`Remove ${f.name}`} style={{ fontSize: 10, color: "var(--ink-4)", padding: "2px 6px" }}>✕</button>
               </div>
             ))}
             {files.length === 0 && (

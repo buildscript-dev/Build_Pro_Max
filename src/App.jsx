@@ -2,9 +2,10 @@ import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { useApp } from './store/AppContext';
 import { CmdK } from './components/command/CmdK';
 import { Dock, TopBar } from './components/navigation/Dock';
+import { BottomNav } from './components/navigation/BottomNav';
 import { AiOrb } from './components/ui/Icons';
 import { Dashboard } from './screens/Dashboard';
-import { accentColor } from './data';
+import { Auth } from './screens/Auth';
 
 const AiChat = lazy(() => import('./screens/AiChat').then(m => ({ default: m.AiChat })));
 const Calendar = lazy(() => import('./screens/Calendar').then(m => ({ default: m.Calendar })));
@@ -54,10 +55,17 @@ function BootSplash() {
   );
 }
 
-export default function App({ onLogout }) {
-  const { state, actions, bootDone, authUser, setAuthUser } = useApp();
+export default function App() {
+  const { state, actions, bootDone, authUser, setAuthUser, onLogout } = useApp();
+  const [showAuth, setShowAuth] = useState(false);
   const [screen, setScreen] = useState('dashboard');
   const [cmdkOpen, setCmdkOpen] = useState(false);
+
+  // Expose navigation for agentic AI
+  useEffect(() => {
+    window.__opencode = { onNavigate: setScreen, actions };
+    return () => { delete window.__opencode; };
+  }, [actions]);
 
   const t = state.tweaks;
 
@@ -87,10 +95,6 @@ export default function App({ onLogout }) {
       root.style.setProperty('--accent-orange', t.palette[1]);
       root.style.setProperty('--accent-coral', t.palette[2]);
       root.style.setProperty('--accent-rose', t.palette[3]);
-      accentColor.amber = t.palette[0];
-      accentColor.orange = t.palette[1];
-      accentColor.coral = t.palette[2];
-      accentColor.rose = t.palette[3];
     }
 
     const motionMap = { calm: 1.4, balanced: 1, lively: 0.7 };
@@ -142,6 +146,20 @@ export default function App({ onLogout }) {
 
   const hasNotifications = state.notifications?.some(n => !n.read);
 
+  const isAuthConnected = !!authUser;
+  const SCREENS = {
+    dashboard: Dashboard,
+    planner: Planner,
+    notes: Notes,
+    calendar: Calendar,
+    tasks: Tasks,
+    contacts: Contacts,
+    files: Files,
+    chat: AiChat,
+    settings: (props) => <Settings {...props} onShowAuth={() => setShowAuth(true)} />,
+    onboarding: Onboarding,
+  };
+
   return (
     <>
       <div className={`paper ${t.canvas === 'mono' ? 'mono' : ''}`} />
@@ -166,18 +184,20 @@ export default function App({ onLogout }) {
         }}
       >
         <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--ink-3)' }}>Loading…</div>}>
-          {screen === 'dashboard' && <Dashboard onNavigate={setScreen} />}
-          {screen === 'planner' && <Planner />}
-          {screen === 'notes' && <Notes />}
-          {screen === 'calendar' && <Calendar />}
-          {screen === 'tasks' && <Tasks />}
-          {screen === 'contacts' && <Contacts />}
-          {screen === 'files' && <Files />}
-          {screen === 'chat' && <AiChat />}
-          {screen === 'settings' && <Settings />}
-          {screen === 'onboarding' && <Onboarding />}
+          {React.createElement(SCREENS[screen] || Dashboard, { onNavigate: setScreen })}
         </Suspense>
       </div>
+
+      {showAuth && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 100,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(246,241,229,.85)', backdropFilter: 'blur(8px)',
+          animation: 'expand-fade 200ms var(--ease-glass)',
+        }}>
+          <Auth onAuth={(user) => { setShowAuth(false); typeof setAuthUser === 'function' && setAuthUser(user); }} />
+        </div>
+      )}
 
       <TopBar
         user={state.user}
@@ -195,6 +215,12 @@ export default function App({ onLogout }) {
         active={screen}
         onSelect={setScreen}
         variant={t.nav}
+        onOpenCmdK={() => setCmdkOpen(true)}
+        hasNotifications={hasNotifications}
+      />
+      <BottomNav
+        active={screen}
+        onSelect={setScreen}
         onOpenCmdK={() => setCmdkOpen(true)}
         hasNotifications={hasNotifications}
       />

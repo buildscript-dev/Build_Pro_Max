@@ -36,14 +36,16 @@ export const AppData = {
   ],
 
   tasks: [
-    { id: "t1", title: "Send Bessemer follow-up memo + cap table", due: "Today 14:30", priority: "P0", status: "doing", project: "Fundraise", ai: "Drafted v3 — review the ARR slide" },
-    { id: "t2", title: "Reply to 8 investor intros from Marc", due: "Today", priority: "P1", status: "todo", project: "Fundraise", ai: "I've grouped them by check size" },
-    { id: "t3", title: "Ship onboarding v3 to staging", due: "Fri", priority: "P0", status: "doing", project: "Product", ai: "Lottie still missing 2 states" },
-    { id: "t4", title: "Founding designer #2 — close Sana or Ines", due: "Mon", priority: "P1", status: "todo", project: "Hiring" },
-    { id: "t5", title: "Review Q2 OKRs with Rohan", due: "Tue", priority: "P2", status: "todo", project: "Team" },
-    { id: "t6", title: "Renew the GMB filing in Estonia", due: "Jun 1", priority: "P2", status: "todo", project: "Ops" },
-    { id: "t7", title: "Cancel that Adobe seat", due: "Whenever", priority: "P3", status: "done", project: "Ops" },
-    { id: "t8", title: "Sketch v0 of the AI Contacts schema", due: "Wed", priority: "P1", status: "doing", project: "Product" },
+    { id: "t1", title: "Send Bessemer follow-up memo + cap table", due: "Today 14:30", priority: "P0", status: "doing", project: "Fundraise", ai: "Drafted v3 — review the ARR slide", recurring: null, subtasks: [] },
+    { id: "t2", title: "Reply to 8 investor intros from Marc", due: "Today", priority: "P1", status: "todo", project: "Fundraise", ai: "I've grouped them by check size", recurring: null, subtasks: [] },
+    { id: "t3", title: "Ship onboarding v3 to staging", due: "Fri", priority: "P0", status: "doing", project: "Product", ai: "Lottie still missing 2 states", recurring: null, subtasks: [] },
+    { id: "t4", title: "Founding designer #2 — close Sana or Ines", due: "Mon", priority: "P1", status: "todo", project: "Hiring", recurring: null, subtasks: [] },
+    { id: "t5", title: "Review Q2 OKRs with Rohan", due: "Tue", priority: "P2", status: "todo", project: "Team", recurring: null, subtasks: [] },
+    { id: "t6", title: "Renew the GMB filing in Estonia", due: "Jun 1", priority: "P2", status: "todo", project: "Ops", recurring: null, subtasks: [] },
+    { id: "t7", title: "Cancel that Adobe seat", due: "Whenever", priority: "P3", status: "done", project: "Ops", recurring: null, subtasks: [] },
+    { id: "t8", title: "Sketch v0 of the AI Contacts schema", due: "Wed", priority: "P1", status: "doing", project: "Product", recurring: null, subtasks: [] },
+    { id: "t9", title: "Morning standup notes", due: "Today", priority: "P2", status: "todo", project: "Team", recurring: "daily", subtasks: [], ai: "Daily recurring" },
+    { id: "t10", title: "Weekly team sync prep", due: "Fri", priority: "P2", status: "todo", project: "Team", recurring: "weekly", subtasks: [], ai: "Weekly recurring" },
   ],
 
   goals: [

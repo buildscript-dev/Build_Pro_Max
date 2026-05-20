@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback, useState, useRef, useMemo } from 'react';
-import { AppData as initialData, accentColor, DOCK_ITEMS } from '../data';
+import React, { createContext, useContext, useReducer, useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import { AppData as initialData } from '../data';
 import { sendNotification, checkDueReminders } from '../services/clock';
 
 const STORAGE_KEY = 'build_pro_max_1_state';
@@ -80,6 +80,43 @@ function freshState() {
 
 function generateId() { return Math.random().toString(36).substring(2, 9); }
 
+function computeNextRecurDate(recurring, currentDue) {
+  if (!recurring) return null;
+  const now = new Date();
+  const next = new Date(now);
+
+  if (currentDue && !isNaN(new Date(currentDue).getTime())) {
+    next.setTime(new Date(currentDue).getTime());
+  }
+
+  switch (recurring) {
+    case 'daily':
+      next.setDate(next.getDate() + 1);
+      break;
+    case 'weekdays': {
+      next.setDate(next.getDate() + 1);
+      const dow = next.getDay();
+      if (dow === 6) next.setDate(next.getDate() + 2);
+      if (dow === 0) next.setDate(next.getDate() + 1);
+      break;
+    }
+    case 'weekly':
+      next.setDate(next.getDate() + 7);
+      break;
+    case 'biweekly':
+      next.setDate(next.getDate() + 14);
+      break;
+    case 'monthly':
+      next.setMonth(next.getMonth() + 1);
+      break;
+    default:
+      return null;
+  }
+
+  const options = { weekday: 'short', month: 'short', day: 'numeric' };
+  return next.toLocaleDateString('en-US', options);
+}
+
 function reducer(state, action) {
   switch (action.type) {
     // ─── Tasks ───
@@ -92,6 +129,8 @@ function reducer(state, action) {
         status: 'todo',
         project: 'General',
         ai: null,
+        recurring: null,
+        subtasks: [],
         createdAt: Date.now(),
         ...action.payload,
         id,
@@ -107,8 +146,52 @@ function reducer(state, action) {
       return { ...state, tasks };
     }
     case 'TOGGLE_TASK': {
-      const tasks = state.tasks.map(t => t.id === action.payload ? { ...t, status: t.status === 'done' ? 'todo' : 'done' } : t);
-      return { ...state, tasks };
+      const task = state.tasks.find(t => t.id === action.payload);
+      if (!task) return state;
+      const isCompleting = task.status !== 'done';
+      let newTasks = state.tasks.map(t =>
+        t.id === action.payload ? { ...t, status: isCompleting ? 'done' : 'todo' } : t
+      );
+
+      // Auto-generate next recurring instance when completing
+      if (isCompleting && task.recurring) {
+        const nextDue = computeNextRecurDate(task.recurring, task.due);
+        if (nextDue) {
+          const id = `t${state.nextTaskId}`;
+          const nextTask = {
+            ...task,
+            id,
+            status: 'todo',
+            due: nextDue,
+            subtasks: task.subtasks?.map(s => ({ ...s, done: false })) || [],
+            ai: `Recurring: next due ${nextDue}`,
+            createdAt: Date.now(),
+          };
+          delete nextTask.recurringInstanceOf;
+          newTasks = [nextTask, ...newTasks];
+          return { ...state, tasks: newTasks, nextTaskId: state.nextTaskId + 1 };
+        }
+      }
+
+      // Auto-update goal progress based on task completion
+      const completedPerProject = {};
+      const totalPerProject = {};
+      newTasks.forEach(t => {
+        const proj = t.project || 'General';
+        totalPerProject[proj] = (totalPerProject[proj] || 0) + 1;
+        if (t.status === 'done') completedPerProject[proj] = (completedPerProject[proj] || 0) + 1;
+      });
+      const projectGoalMap = { Fundraise: 'Close seed', Product: 'Ship v1', Hiring: 'Team to 8' };
+      const updatedGoals = state.goals.map(g => {
+        const matchedProject = Object.entries(projectGoalMap).find(([, goalName]) => goalName === g.name)?.[0];
+        if (matchedProject && totalPerProject[matchedProject] > 0) {
+          const pct = Math.round((completedPerProject[matchedProject] || 0) / totalPerProject[matchedProject] * 100);
+          return { ...g, pct: Math.min(100, Math.max(0, pct)) };
+        }
+        return g;
+      });
+
+      return { ...state, tasks: newTasks, goals: updatedGoals };
     }
     case 'REORDER_TASKS': {
       return { ...state, tasks: action.payload };
@@ -221,10 +304,13 @@ function reducer(state, action) {
       return { ...state, files };
     }
     case 'REMOVE_FILE': {
-      // Support matching by id (preferred) or name (legacy fallback)
-      const files = state.files.filter(f =>
-        f.id ? f.id !== action.payload : f.name !== action.payload
-      );
+      // Match by id first, fall back to name
+      const files = state.files.filter(f => {
+        if (action.payload && typeof action.payload === 'object') {
+          return f.id !== action.payload.id && f.name !== action.payload.name;
+        }
+        return f.id !== action.payload && f.name !== action.payload;
+      });
       return { ...state, files };
     }
 
@@ -255,6 +341,9 @@ function reducer(state, action) {
     // ─── Chat ───
     case 'ADD_CHAT_MESSAGE': {
       return { ...state, chatMessages: [...state.chatMessages, { id: generateId(), time: Date.now(), ...action.payload }] };
+    }
+    case 'CLEAR_CHAT': {
+      return { ...state, chatMessages: [] };
     }
 
     // ─── Notifications ───
@@ -296,7 +385,7 @@ function reducer(state, action) {
 
 const AppContext = createContext(null);
 
-export function AppProvider({ children, authUser: initialAuthUser = null }) {
+export function AppProvider({ children, authUser: initialAuthUser = null, setAuthUser: externalSetAuth = null, onLogout: externalLogout = null }) {
   const saved = loadState();
   const [state, dispatch] = useReducer(reducer, saved || freshState());
   const [bootDone, setBootDone] = useState(false);
@@ -313,11 +402,28 @@ export function AppProvider({ children, authUser: initialAuthUser = null }) {
     if (persistTimer.current) clearTimeout(persistTimer.current);
     persistTimer.current = setTimeout(() => {
       try {
-        const { chatMessages, ...rest } = state;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        // Broadcast state to other tabs (cross-tab sync)
+        if (window.__buildProMaxSync?.broadcast) {
+          window.__buildProMaxSync.broadcast(state);
+        }
       } catch (e) { /* quota exceeded — ignore */ }
     }, 400);
     return () => clearTimeout(persistTimer.current);
+  }, [state]);
+
+  // Listen for cross-tab state sync events
+  useEffect(() => {
+    const handleSync = (e) => {
+      const syncedState = e.detail;
+      if (syncedState && syncedState !== state) {
+        // Reload to pick up the new localStorage state
+        // In production, merge states properly with version/timestamp
+        window.location.reload();
+      }
+    };
+    window.addEventListener('build_pro_max_state_sync', handleSync);
+    return () => window.removeEventListener('build_pro_max_state_sync', handleSync);
   }, [state]);
 
   // Use a ref to always have fresh state inside the AI interval (avoids stale closure)
@@ -358,6 +464,14 @@ export function AppProvider({ children, authUser: initialAuthUser = null }) {
         });
       }
     }, 60000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Contact warmth decay — decay every 6 hours
+  useEffect(() => {
+    const iv = setInterval(() => {
+      dispatch({ type: 'DECAY_WARMTH' });
+    }, 6 * 3600000); // 6 hours
     return () => clearInterval(iv);
   }, []);
 
@@ -404,6 +518,7 @@ export function AppProvider({ children, authUser: initialAuthUser = null }) {
 
     // Chat
     addChatMessage: (data) => dispatch({ type: 'ADD_CHAT_MESSAGE', payload: data }),
+    clearChat: () => dispatch({ type: 'CLEAR_CHAT' }),
 
     // Notifications
     addNotification: (data) => dispatch({ type: 'ADD_NOTIFICATION', payload: data }),
@@ -423,8 +538,17 @@ export function AppProvider({ children, authUser: initialAuthUser = null }) {
     decayWarmth: () => dispatch({ type: 'DECAY_WARMTH' }),
   }), [dispatch]);
 
+  const contextValue = useMemo(() => ({
+    state,
+    actions,
+    bootDone,
+    authUser,
+    setAuthUser,
+    onLogout: externalLogout || (() => {}),
+  }), [state, actions, bootDone, authUser, setAuthUser, externalLogout]);
+
   return (
-    <AppContext.Provider value={{ state, actions, bootDone, authUser, setAuthUser }}>
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );

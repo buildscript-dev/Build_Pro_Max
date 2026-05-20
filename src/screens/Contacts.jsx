@@ -1,27 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb, Avatar } from '../components/ui/Icons';
 import { accentColor } from '../data';
 import { useApp } from '../store/AppContext';
 import { isGmailConnected, getRecentEmails } from '../services/gmail';
-
-const ScreenShell = ({ title, eyebrow, subtitle, right, children, padTop = 86, padBottom = 110 }) => (
-  <div className="scroll" style={{
-    position: "absolute", inset: 0, paddingTop: padTop, paddingBottom: padBottom,
-    paddingLeft: 36, paddingRight: 36, overflowY: "auto",
-  }}>
-    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 28, paddingLeft: 6, paddingRight: 6 }}>
-      <div>
-        {eyebrow && <div className="t-cap" style={{ marginBottom: 8, color: "var(--accent-orange)" }}>{eyebrow}</div>}
-        <h1 className="t-display" style={{ margin: 0, fontSize: 52, fontWeight: 400, letterSpacing: "-0.025em", lineHeight: 1.02 }}>
-          {title}
-        </h1>
-        {subtitle && <div style={{ marginTop: 10, fontSize: 14, color: "var(--ink-2)", maxWidth: 720 }}>{subtitle}</div>}
-      </div>
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>{right}</div>
-    </div>
-    {children}
-  </div>
-);
+import { generateEmailDraft } from '../services/ai';
+import { ScreenShell } from '../components/ui/ScreenShell';
 
 const TAGS = ['Team', 'Investor', 'Hiring', 'Personal', 'Network', 'Partner', 'Mentor'];
 const COLORS = ['amber', 'orange', 'coral', 'rose'];
@@ -29,16 +12,16 @@ const COLORS = ['amber', 'orange', 'coral', 'rose'];
 export const Contacts = () => {
   const { state, actions } = useApp();
   const contacts = state.contacts || [];
-  const [sel, setSel] = useState(0);
-  const [showAdd, setShowAdd] = useState(false);
-  const [newContact, setNewContact] = useState({ name: '', role: '', tag: 'Network', color: 'amber' });
-  const [editing, setEditing] = useState(false);
-  const [editContact, setEditContact] = useState({});
+  const [selId, setSelId] = useState(contacts[0]?.id || null);
 
-  const [gmailEmails, setGmailEmails] = useState([]);
-  const [syncing, setSyncing] = useState(false);
+  const c = contacts.find(c => c.id === selId);
 
-  const c = contacts[sel];
+  // Auto-select first contact if nothing selected
+  useEffect(() => {
+    if (!selId && contacts.length > 0) {
+      setSelId(contacts[0].id);
+    }
+  }, [contacts, selId]);
 
   const syncFromGmail = useCallback(async () => {
     if (!isGmailConnected()) {
@@ -72,12 +55,16 @@ export const Contacts = () => {
     setShowAdd(false);
   };
 
-  const deleteContact = (idx) => {
-    const contact = contacts[idx];
+  const deleteContact = (contactId) => {
+    const contact = contacts.find(c => c.id === contactId);
     if (!contact) return;
+    if (!window.confirm(`Delete "${contact.name}"?`)) return;
     actions.deleteContact(contact.id);
     actions.addNotification({ text: `Contact "${contact.name}" deleted`, kind: 'info' });
-    if (sel >= contacts.length - 1) setSel(Math.max(0, sel - 1));
+    if (selId === contactId) {
+      const remaining = contacts.filter(c => c.id !== contactId);
+      setSelId(remaining[0]?.id || null);
+    }
   };
 
   const startEdit = () => {
@@ -101,9 +88,23 @@ export const Contacts = () => {
     actions.addNotification({ text: `Event scheduled with ${c.name}`, kind: 'info' });
   };
 
-  const draftMessage = () => {
+  const draftMessage = async () => {
     if (!c) return;
-    actions.addNotification({ text: `Draft opened for ${c.name}`, kind: 'info' });
+    setAiDraftLoading(true);
+    const draft = await generateEmailDraft(c, state);
+    setAiDraft(draft);
+    setAiDraftLoading(false);
+    actions.addNotification({ text: `AI drafted email for ${c.name}`, kind: 'info' });
+  };
+
+  const copyDraft = () => {
+    navigator.clipboard?.writeText(aiDraft);
+    actions.addNotification({ text: 'Draft copied to clipboard', kind: 'info' });
+  };
+
+  const closeDraft = () => {
+    setAiDraft('');
+    setAiDraftLoading(false);
   };
 
   return (
@@ -112,7 +113,12 @@ export const Contacts = () => {
       title={<>People who <span className="t-display-italic" style={{ color: "var(--accent-orange)" }}>matter</span>.</>}
       subtitle={<>Warmth, last touch, and what AI noticed. It's a relationship system, not an address book.</>}
       right={<>
-        {isGmailConnected() && <PaperButton icon="sync" small onClick={syncFromGmail} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync Gmail'}</PaperButton>}
+        {isGmailConnected() && <PaperButton icon="sync" small onClick={syncFromGmail} disabled={syncing}>{syncing ? (
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 12, height: 12, borderRadius: "50%", border: "1.5px solid currentColor", borderTopColor: "transparent", animation: "orb-pulse 1s linear infinite" }} />
+            Syncing…
+          </span>
+        ) : 'Sync Gmail'}</PaperButton>}
         <PaperButton icon="plus" primary onClick={() => setShowAdd(true)}>Add person</PaperButton>
       </>}
     >
@@ -150,13 +156,13 @@ export const Contacts = () => {
           <div style={{ padding: "14px 22px", borderBottom: "0.5px solid var(--ink-line)", display: "grid", gridTemplateColumns: "44px 1fr 100px 80px 110px auto", gap: 12, alignItems: "center" }}>
             <span/><span className="t-cap">Person</span><span className="t-cap">Tag</span><span className="t-cap">Warmth</span><span className="t-cap">Last touch</span><span/>
           </div>
-          {contacts.map((contact, i) => (
-            <div key={contact.id || i} onClick={() => setSel(i)} style={{
+          {contacts.map((contact) => (
+            <div key={contact.id} onClick={() => setSelId(contact.id)} style={{
               padding: "12px 22px", display: "grid", gridTemplateColumns: "44px 1fr 100px 80px 110px auto",
               gap: 12, alignItems: "center",
-              borderBottom: i < contacts.length - 1 ? "0.5px solid var(--ink-line)" : "none",
-              background: sel === i ? "rgba(245,165,36,.10)" : "transparent",
-              boxShadow: sel === i ? "inset 3px 0 0 var(--accent-orange)" : "none",
+              borderBottom: contact.id !== contacts[contacts.length - 1].id ? "0.5px solid var(--ink-line)" : "none",
+              background: selId === contact.id ? "rgba(245,165,36,.10)" : "transparent",
+              boxShadow: selId === contact.id ? "inset 3px 0 0 var(--accent-orange)" : "none",
               cursor: "default",
             }}>
               <Avatar initials={contact.avatar || contact.name?.[0] || '?'} color={contact.color} size={36} />
@@ -177,11 +183,15 @@ export const Contacts = () => {
                 }}/>
               </div>
               <span style={{ fontSize: 11, color: "var(--ink-3)" }}>{contact.last}</span>
-              <button onClick={(e) => { e.stopPropagation(); deleteContact(i); }} style={{ fontSize: 10, color: "var(--ink-4)", padding: "2px 6px" }}>✕</button>
+              <button onClick={(e) => { e.stopPropagation(); deleteContact(contact.id); }} style={{ fontSize: 10, color: "var(--ink-4)", padding: "2px 6px" }}>✕</button>
             </div>
           ))}
           {contacts.length === 0 && (
-            <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "var(--ink-3)" }}>No contacts yet.</div>
+            <div style={{ padding: 40, textAlign: "center" }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>👥</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--ink-2)", marginBottom: 4 }}>No contacts yet</div>
+              <div style={{ fontSize: 12, color: "var(--ink-3)" }}>Add a person or sync from Gmail to get started.</div>
+            </div>
           )}
         </GlassCard>
 
@@ -230,7 +240,13 @@ export const Contacts = () => {
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                   <PaperButton small onClick={startEdit}>Edit</PaperButton>
-                  <PaperButton small accent onClick={() => deleteContact(sel)}>Delete</PaperButton>
+                  <PaperButton small primary onClick={draftMessage} disabled={aiDraftLoading}>{aiDraftLoading ? (
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ width: 12, height: 12, borderRadius: "50%", border: "1.5px solid currentColor", borderTopColor: "transparent", animation: "orb-pulse 1s linear infinite" }} />
+                      Drafting…
+                    </span>
+                  ) : 'AI draft email'}</PaperButton>
+                  <PaperButton small accent onClick={() => deleteContact(c.id)}>Delete</PaperButton>
                 </div>
               </GlassCard>
               {c.ai && (
@@ -241,8 +257,7 @@ export const Contacts = () => {
                   </div>
                   <div style={{ fontSize: 14, color: "var(--ink-1)", marginTop: 10, lineHeight: 1.5 }}>{c.ai}</div>
                   <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                    <PaperButton small onClick={schedule}>Schedule</PaperButton>
-                    <PaperButton small primary onClick={draftMessage}>Draft message</PaperButton>
+                    <PaperButton small onClick={schedule}>Schedule 1:1</PaperButton>
                   </div>
                 </GlassCard>
               )}
@@ -268,6 +283,23 @@ export const Contacts = () => {
               </div>
             ))}
           </div>
+        </GlassCard>
+      )}
+
+      {aiDraft && (
+        <GlassCard style={{ position: 'relative', marginTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <AiOrb size={18} />
+            <div className="t-cap" style={{ color: 'var(--accent-orange)' }}>AI draft · {c?.name}</div>
+            <div style={{ flex: 1 }} />
+            <button onClick={closeDraft} style={{ fontSize: 11, color: 'var(--ink-3)', padding: '2px 6px' }}>✕</button>
+          </div>
+          <div style={{
+            fontSize: 13, color: 'var(--ink-1)', lineHeight: 1.6,
+            whiteSpace: 'pre-wrap', padding: 12, borderRadius: 10,
+            background: 'rgba(255,252,244,.6)', border: '0.5px solid rgba(26,20,16,.06)',
+          }}>{aiDraft}</div>
+          <PaperButton small onClick={copyDraft} style={{ marginTop: 10 }}>Copy to clipboard</PaperButton>
         </GlassCard>
       )}
     </ScreenShell>

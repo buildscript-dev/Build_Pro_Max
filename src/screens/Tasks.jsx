@@ -2,50 +2,60 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb } from '../components/ui/Icons';
 import { useApp } from '../store/AppContext';
 import { generateAiResponse } from '../services/ai';
-
-const ScreenShell = ({ title, eyebrow, subtitle, right, children, padTop = 86, padBottom = 110 }) => (
-  <div className="scroll" style={{
-    position: "absolute", inset: 0, paddingTop: padTop, paddingBottom: padBottom,
-    paddingLeft: 36, paddingRight: 36, overflowY: "auto",
-  }}>
-    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 28, paddingLeft: 6, paddingRight: 6 }}>
-      <div>
-        {eyebrow && <div className="t-cap" style={{ marginBottom: 8, color: "var(--accent-orange)" }}>{eyebrow}</div>}
-        <h1 className="t-display" style={{ margin: 0, fontSize: 52, fontWeight: 400, letterSpacing: "-0.025em", lineHeight: 1.02 }}>
-          {title}
-        </h1>
-        {subtitle && <div style={{ marginTop: 10, fontSize: 14, color: "var(--ink-2)", maxWidth: 720 }}>{subtitle}</div>}
-      </div>
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>{right}</div>
-    </div>
-    {children}
-  </div>
-);
+import { ScreenShell } from '../components/ui/ScreenShell';
 
 const PRIORITIES = ['P0', 'P1', 'P2', 'P3'];
 const PROJECTS = ['Fundraise', 'Product', 'Hiring', 'Team', 'Ops', 'General', 'Design', 'Engineering'];
 const STATUSES = ['todo', 'doing', 'done'];
+const RECUR_OPTIONS = [
+  { value: null, label: 'No repeat' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekdays', label: 'Weekdays' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Biweekly' },
+  { value: 'monthly', label: 'Monthly' },
+];
 
 export const Tasks = () => {
   const { state, actions } = useApp();
   const [filter, setFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('default');
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
-  const [newTask, setNewTask] = useState({ title: '', project: 'General', priority: 'P2', due: 'Today' });
+  const [newTask, setNewTask] = useState({ title: '', project: 'General', priority: 'P2', due: 'Today', recurring: null });
   const [dragOverId, setDragOverId] = useState(null);
+  const [expandedSubtasks, setExpandedSubtasks] = useState({});
 
   const tasks = state.tasks || [];
 
   const filtered = useMemo(() => {
-    return tasks.filter(t => {
+    let result = tasks.filter(t => {
       if (filter === 'all') return true;
       if (filter === 'today') return /today/i.test(t.due);
       if (filter === 'open') return t.status !== 'done';
       if (filter === 'done') return t.status === 'done';
+      if (filter === 'overdue') return t.status !== 'done' && /past/i.test(t.due);
+      if (filter === 'p0') return t.priority === 'P0' && t.status !== 'done';
       return true;
     });
-  }, [tasks, filter]);
+
+    if (sortBy === 'priority') {
+      const pOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
+      result = [...result].sort((a, b) => (pOrder[a.priority] ?? 99) - (pOrder[b.priority] ?? 99));
+    } else if (sortBy === 'due') {
+      const dueOrder = { Today: 0, Tomorrow: 1, Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6 };
+      result = [...result].sort((a, b) => {
+        const aOrder = dueOrder[a.due] ?? 99;
+        const bOrder = dueOrder[b.due] ?? 99;
+        return aOrder - bOrder;
+      });
+    } else if (sortBy === 'project') {
+      result = [...result].sort((a, b) => (a.project || '').localeCompare(b.project || ''));
+    }
+
+    return result;
+  }, [tasks, filter, sortBy]);
 
   const groups = useMemo(() => {
     const g = {};
@@ -55,9 +65,11 @@ export const Tasks = () => {
 
   const addTask = () => {
     if (!newTask.title.trim()) return;
-    actions.addTask({ ...newTask, title: newTask.title.trim(), status: 'todo' });
+    const taskPayload = { ...newTask, title: newTask.title.trim(), status: 'todo' };
+    if (!taskPayload.recurring) taskPayload.recurring = null;
+    actions.addTask(taskPayload);
     actions.addNotification({ text: `Task "${newTask.title}" created`, kind: 'info' });
-    setNewTask({ title: '', project: 'General', priority: 'P2', due: 'Today' });
+    setNewTask({ title: '', project: 'General', priority: 'P2', due: 'Today', recurring: null });
     setShowAdd(false);
   };
 
@@ -79,6 +91,7 @@ export const Tasks = () => {
   };
 
   const deleteTask = (id, title) => {
+    if (!window.confirm(`Delete "${title}"?`)) return;
     actions.deleteTask(id);
     actions.addNotification({ text: `Task "${title}" deleted`, kind: 'info' });
     if (editingId === id) { setEditingId(null); setEditData({}); }
@@ -118,6 +131,26 @@ export const Tasks = () => {
     setAiLoading(false);
   }, [tasks, state]);
 
+  const toggleSubtask = (taskId, subIdx) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || !task.subtasks) return;
+    const updatedSubtasks = task.subtasks.map((s, i) =>
+      i === subIdx ? { ...s, done: !s.done } : s
+    );
+    actions.updateTask({ id: taskId, subtasks: updatedSubtasks });
+  };
+
+  const addSubtask = (taskId, title) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || !title.trim()) return;
+    const updatedSubtasks = [...(task.subtasks || []), { title: title.trim(), done: false }];
+    actions.updateTask({ id: taskId, subtasks: updatedSubtasks });
+  };
+
+  const toggleExpand = (taskId) => {
+    setExpandedSubtasks(prev => ({ ...prev, [taskId]: !prev[taskId] }));
+  };
+
   const killSnoozer = () => {
     const snoozed = tasks.filter(t => t.status !== 'done' && /past/i.test(t.due));
     if (snoozed.length > 0) {
@@ -142,16 +175,23 @@ export const Tasks = () => {
       subtitle={<>Sorted by priority, slip-risk, and how often you've snoozed it. Drag to reorder; AI watches.</>}
       right={<>
         <div style={{ display: "flex", padding: 3, gap: 2, borderRadius: 999, background: "rgba(26,20,16,.05)" }}>
-          {["all","today","open","done"].map(f => (
+          {["all","today","open","p0","overdue","done"].map(f => (
             <button key={f} onClick={() => setFilter(f)} style={{
               padding: "6px 14px", borderRadius: 999, fontSize: 12, fontWeight: 500,
               background: filter === f ? "rgba(255,252,244,.95)" : "transparent",
               color: filter === f ? "var(--ink-1)" : "var(--ink-3)",
               boxShadow: filter === f ? "0 1px 0 rgba(255,255,255,.7) inset, 0 1px 2px rgba(46,30,12,.10)" : "none",
               textTransform: "capitalize",
-            }}>{f}</button>
+            }}>{f === 'p0' ? 'P0' : f}</button>
           ))}
         </div>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+          style={{ padding: "6px 12px", borderRadius: 999, fontSize: 11.5, border: "0.5px solid var(--ink-line)", background: "rgba(255,252,244,.7)", color: "var(--ink-2)", fontWeight: 500 }}>
+          <option value="default">Default order</option>
+          <option value="priority">By priority</option>
+          <option value="due">By due date</option>
+          <option value="project">By project</option>
+        </select>
         <PaperButton icon="plus" primary onClick={() => setShowAdd(true)}>Capture</PaperButton>
       </>}
     >
@@ -177,6 +217,10 @@ export const Tasks = () => {
               <select value={newTask.due} onChange={(e) => setNewTask({ ...newTask, due: e.target.value })}
                 style={{ padding: "4px 10px", borderRadius: 8, fontSize: 11, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}>
                 {["Today", "Tomorrow", "Mon", "Tue", "Wed", "Thu", "Fri", "Next week", "Whenever"].map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <select value={newTask.recurring || ''} onChange={(e) => setNewTask({ ...newTask, recurring: e.target.value || null })}
+                style={{ padding: "4px 10px", borderRadius: 8, fontSize: 11, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}>
+                {RECUR_OPTIONS.map(r => <option key={r.value || 'none'} value={r.value || ''}>{r.label}</option>)}
               </select>
               <div style={{ flex: 1 }} />
               <PaperButton small onClick={() => setShowAdd(false)}>Cancel</PaperButton>
@@ -208,6 +252,10 @@ export const Tasks = () => {
                   onDragOver={(e) => handleDragOver(e, t.id)}
                   onDrop={(e) => handleDrop(e, t.id)}
                   isDragOver={dragOverId === t.id}
+                  onToggleSubtask={toggleSubtask}
+                  onAddSubtask={addSubtask}
+                  isExpanded={!!expandedSubtasks[t.id]}
+                  onToggleExpand={() => toggleExpand(t.id)}
                 />
               ))}
             </div>
@@ -232,7 +280,12 @@ export const Tasks = () => {
             {aiAdvice || `"${tasks.filter(t => t.status !== 'done' && /past/i.test(t.due)).length} tasks overdue. Two are recoverable. Click analyze for AI advice."`}
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-            <PaperButton small onClick={askAi} disabled={aiLoading}>{aiLoading ? 'Analyzing…' : 'AI analyze'}</PaperButton>
+            <PaperButton small onClick={askAi} disabled={aiLoading}>{aiLoading ? (
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 12, height: 12, borderRadius: "50%", border: "1.5px solid currentColor", borderTopColor: "transparent", animation: "orb-pulse 1s linear infinite" }} />
+                Analyzing…
+              </span>
+            ) : 'AI analyze'}</PaperButton>
             <PaperButton small onClick={() => setFilter('today')}>Show today</PaperButton>
             <PaperButton small accent onClick={killSnoozer}>Kill snoozers ({getSnoozedCount()})</PaperButton>
             <PaperButton small primary onClick={replanRecoverables}>Replan overdue</PaperButton>
@@ -243,7 +296,7 @@ export const Tasks = () => {
   );
 };
 
-const TaskRow = ({ t, editingId, editData, onStartEdit, onEditChange, onSaveEdit, onCancelEdit, onDelete, onToggle, onDragStart, onDragOver, onDrop, isDragOver }) => {
+const TaskRow = ({ t, editingId, editData, onStartEdit, onEditChange, onSaveEdit, onCancelEdit, onDelete, onToggle, onDragStart, onDragOver, onDrop, isDragOver, onToggleSubtask, onAddSubtask, isExpanded, onToggleExpand }) => {
   const p = { P0: "#e7402e", P1: "#f06b1c", P2: "#f5a524", P3: "#b3a890" }[t.priority];
   const isEditing = editingId === t.id;
 
@@ -276,6 +329,10 @@ const TaskRow = ({ t, editingId, editData, onStartEdit, onEditChange, onSaveEdit
           <select value={editData.status} onChange={(e) => onEditChange({ ...editData, status: e.target.value })}
             style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}>
             {['todo','doing','done'].map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select value={editData.recurring || ''} onChange={(e) => onEditChange({ ...editData, recurring: e.target.value || null })}
+            style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}>
+            {RECUR_OPTIONS.map(r => <option key={r.value || 'none'} value={r.value || ''}>{r.label}</option>)}
           </select>
           <div style={{ flex: 1 }} />
           <button onClick={onCancelEdit} style={{ fontSize: 11, color: "var(--ink-3)", padding: "2px 6px" }}>Cancel</button>
@@ -323,6 +380,36 @@ const TaskRow = ({ t, editingId, editData, onStartEdit, onEditChange, onSaveEdit
           <button onClick={() => onStartEdit(t)} style={{ fontSize: 10, color: "var(--ink-3)" }}>Edit</button>
           <button onClick={() => onDelete(t.id)} style={{ fontSize: 10, color: "var(--ink-4)" }}>✕</button>
         </div>
+        {t.recurring && (
+          <div style={{
+            marginTop: 6, padding: "3px 8px", borderRadius: 6,
+            background: "rgba(74,143,94,.10)", fontSize: 10.5, color: "var(--ok)",
+            display: "inline-flex", alignItems: "center", gap: 4,
+          }}>
+            ↻ {RECUR_OPTIONS.find(r => r.value === t.recurring)?.label || t.recurring}
+          </div>
+        )}
+        {t.subtasks && t.subtasks.length > 0 && (
+          <div style={{ marginTop: 6 }}>
+            <button onClick={onToggleExpand} style={{ fontSize: 10.5, color: "var(--ink-3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+              {t.subtasks.filter(s => s.done).length}/{t.subtasks.length} subtasks {isExpanded ? '▲' : '▼'}
+            </button>
+            {isExpanded && (
+              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                {t.subtasks.map((s, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--ink-2)" }}>
+                    <input type="checkbox" checked={!!s.done} onChange={() => onToggleSubtask(t.id, i)}
+                      style={{ margin: 0, cursor: "pointer" }}
+                    />
+                    <span style={{ textDecoration: s.done ? "line-through" : "none", opacity: s.done ? 0.5 : 1 }}>
+                      {s.title}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {t.ai && (
           <div style={{
             marginTop: 6, padding: "5px 8px", borderRadius: 6,

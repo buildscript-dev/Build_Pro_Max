@@ -2,25 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb } from '../components/ui/Icons';
 import { accentColor } from '../data';
 import { useApp } from '../store/AppContext';
-
-const ScreenShell = ({ title, eyebrow, subtitle, right, children, padTop = 86, padBottom = 110 }) => (
-  <div className="scroll" style={{
-    position: "absolute", inset: 0, paddingTop: padTop, paddingBottom: padBottom,
-    paddingLeft: 36, paddingRight: 36, overflowY: "auto",
-  }}>
-    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 28, paddingLeft: 6, paddingRight: 6 }}>
-      <div>
-        {eyebrow && <div className="t-cap" style={{ marginBottom: 8, color: "var(--accent-orange)" }}>{eyebrow}</div>}
-        <h1 className="t-display" style={{ margin: 0, fontSize: 52, fontWeight: 400, letterSpacing: "-0.025em", lineHeight: 1.02 }}>
-          {title}
-        </h1>
-        {subtitle && <div style={{ marginTop: 10, fontSize: 14, color: "var(--ink-2)", maxWidth: 720 }}>{subtitle}</div>}
-      </div>
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>{right}</div>
-    </div>
-    {children}
-  </div>
-);
+import { ScreenShell } from '../components/ui/ScreenShell';
 
 const COLORS = ['amber', 'orange', 'coral', 'rose'];
 
@@ -72,6 +54,7 @@ export const Calendar = () => {
   };
 
   const deleteEvent = (id) => {
+    if (!window.confirm('Delete this event?')) return;
     actions.deleteEvent(id);
     actions.addNotification({ text: `Event deleted`, kind: 'info' });
     if (editingId === id) { setEditingId(null); setEditData({}); }
@@ -85,10 +68,13 @@ export const Calendar = () => {
     actions.addNotification({ text: `Auto-filled week with 3 new blocks (had ${existing} existing)`, kind: 'info' });
   };
 
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const monthName = months[currentMonth];
+
   return (
     <ScreenShell
       eyebrow="AI Calendar"
-      title={<>May <span className="t-display-italic" style={{ color: "var(--accent-orange)" }}>2026</span>.</>}
+      title={<>{monthName} <span className="t-display-italic" style={{ color: "var(--accent-orange)" }}>{currentYear}</span>.</>}
       subtitle={<>Events from Google + iCloud + Linear, planned around your execution tracks. AI fills the gaps.</>}
       right={<>
         <PaperButton icon="sparkle" small onClick={autoFill}>Auto-fill week</PaperButton>
@@ -145,7 +131,7 @@ export const Calendar = () => {
                 }}>
                   <div style={{ textAlign: "right" }}>
                     <div className="t-num" style={{ fontSize: 22, lineHeight: 1, color: "var(--ink-1)" }}>{e.day}</div>
-                    <div className="t-mono" style={{ fontSize: 9.5, color: "var(--ink-3)" }}>May</div>
+                    <div className="t-mono" style={{ fontSize: 9.5, color: "var(--ink-3)" }}>{months[currentMonth].slice(0, 3)}</div>
                   </div>
                   <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                     <span style={{ width: 4, height: 28, background: c, borderRadius: 2 }}/>
@@ -159,7 +145,11 @@ export const Calendar = () => {
                 </div>
               );
             }) : (
-              <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "var(--ink-3)" }}>No upcoming events</div>
+              <div style={{ padding: 24, textAlign: "center" }}>
+                <div style={{ fontSize: 24, marginBottom: 8 }}>📅</div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: "var(--ink-2)", marginBottom: 4 }}>No upcoming events</div>
+                <div style={{ fontSize: 11, color: "var(--ink-3)" }}>Click "New event" or "Auto-fill week" to populate your calendar.</div>
+              </div>
             )}
           </div>
         </GlassCard>

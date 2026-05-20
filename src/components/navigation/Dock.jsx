@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Icon, AiOrb, Avatar } from '../ui/Icons';
 import { DOCK_ITEMS, accentColor } from '../../data';
 
@@ -57,6 +57,7 @@ export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, recentAct
               ref={(el) => {if (el) itemRefs.current[item.id] = el;}}
               onClick={() => onSelect(item.id)}
               title={item.label}
+              aria-label={item.label}
               style={{
                 width: base, height: base, borderRadius: 12,
                 background: isActive ?
@@ -119,6 +120,7 @@ export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, recentAct
         <button
           onClick={onOpenCmdK}
           title="AI command bar (⌘K)"
+          aria-label="Open AI command bar"
           style={{
             width: 44, height: 44, borderRadius: 12,
             background: "rgba(26, 20, 16, 0.86)",
@@ -153,6 +155,7 @@ const SideRail = ({ active, onSelect, onOpenCmdK, hasNotifications }) => {
           <button key={item.id}
           onClick={() => onSelect(item.id)}
           title={item.label}
+          aria-label={item.label}
           style={{
             width: 40, height: 40, borderRadius: 10,
             background: isActive ? `${accentColor[item.accent]}15` : "transparent",
@@ -172,7 +175,7 @@ const SideRail = ({ active, onSelect, onOpenCmdK, hasNotifications }) => {
           </button>);
       })}
       <div style={{ height: 1, background: "rgba(26,20,16,.10)", margin: "4px 6px" }} />
-      <button onClick={onOpenCmdK} style={{
+      <button onClick={onOpenCmdK} aria-label="Open AI command bar" style={{
         width: 40, height: 40, borderRadius: 10,
         background: "rgba(26,20,16,.86)", color: "#fff8e8",
         display: "flex", alignItems: "center", justifyContent: "center",
@@ -185,6 +188,17 @@ const SideRail = ({ active, onSelect, onOpenCmdK, hasNotifications }) => {
 export const TopBar = ({ user, today, onOpenCmdK, variant = "dock", active, onSelect, hasNotifications, notifications = [], onClearNotifications, onMarkAllRead }) => {
   const showInlineNav = variant === "top";
   const [showNotif, setShowNotif] = useState(false);
+  const [lastSync, setLastSync] = useState(() => Date.now());
+
+  // Update sync timestamp when state changes in other tabs
+  useEffect(() => {
+    const handleSync = () => setLastSync(Date.now());
+    window.addEventListener('build_pro_max_state_sync', handleSync);
+    return () => window.removeEventListener('build_pro_max_state_sync', handleSync);
+  }, []);
+
+  const syncAgo = Math.round((Date.now() - lastSync) / 1000);
+  const syncLabel = syncAgo < 5 ? 'Synced' : syncAgo < 60 ? `${syncAgo}s ago` : `${Math.floor(syncAgo / 60)}m ago`;
 
   return (
     <div style={{
@@ -199,6 +213,7 @@ export const TopBar = ({ user, today, onOpenCmdK, variant = "dock", active, onSe
     }}>
       <button
         onClick={() => onSelect('files')}
+        aria-label="Go to Files screen"
         style={{
           display: "flex", alignItems: "center", gap: 10,
           background: "none", border: "none", padding: 0, margin: 0,
@@ -244,7 +259,7 @@ export const TopBar = ({ user, today, onOpenCmdK, variant = "dock", active, onSe
 
       <div style={{ flex: 1 }} />
 
-      <button onClick={onOpenCmdK} style={{
+      <button onClick={onOpenCmdK} aria-label="Search and ask AI" style={{
         height: 36, padding: "0 14px 0 12px", borderRadius: 999,
         background: "rgba(26, 20, 16, 0.05)",
         border: "0.5px solid rgba(26,20,16,.08)",
@@ -260,10 +275,20 @@ export const TopBar = ({ user, today, onOpenCmdK, variant = "dock", active, onSe
         <span style={{ fontWeight: 500 }}>{today.date}</span>
       </div>
 
+      <div className="chip" style={{ height: 30, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{
+          width: 6, height: 6, borderRadius: '50%',
+          background: syncAgo < 30 ? 'var(--ok)' : 'var(--warn)',
+          boxShadow: syncAgo < 30 ? '0 0 4px var(--ok)' : 'none',
+        }} />
+        <span style={{ fontSize: 10, color: 'var(--ink-3)', fontWeight: 500 }}>{syncLabel}</span>
+      </div>
+
       <div style={{ position: "relative" }}>
         <button
           onClick={() => setShowNotif(!showNotif)}
           title="Notifications"
+          aria-label="Toggle notifications"
           style={{ width: 36, height: 36, borderRadius: 999, position: "relative" }}>
           <Icon name="bell" size={16} />
           {hasNotifications && (
