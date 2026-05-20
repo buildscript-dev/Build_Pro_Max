@@ -174,15 +174,12 @@ body {
     );
 }
 .paper::before {
-  /* static warm grain — no animation, no GPU cost */
   content: "";
   position: absolute;
   inset: 0;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.4 0 0 0 0 0.32 0 0 0 0 0.2 0 0 0 0.28 0'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>");
-  opacity: var(--grain-opacity);
-  mix-blend-mode: multiply;
+  background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyBAMAAADsEZWCAAAAGFBMVEUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/p62RAAAACHRSTlMAAAAA/////wD/t7s2AAAAZklEQVQ4y2NgQAX8DIxoQh6G0ox8jCgCA372/2A+IyPz/z//Gf7//88w/v//H8ZnjIwwI97//88w//8/hvH//3+Gv//xR/7//x/D//9jGN///2f///8/xj//xzD//38Mo//xRwwCAHkF+z3JpS9WAAAAAElFTkSuQmCC");
+  opacity: 0.05;
   pointer-events: none;
-  /* animation removed — grain-shift caused continuous compositor work */
 }
 
 @keyframes grain-shift {
@@ -209,7 +206,7 @@ body {
   pointer-events: none;
 }
 
-/* ─── Ambient drifting orbs (animation layer) ─────────────── */
+/* Ambient drifting orbs (animation layer) */
 .ambient {
   position: fixed;
   inset: 0;
@@ -220,52 +217,48 @@ body {
   transition: opacity 600ms var(--ease-glass);
 }
 
-/* Flowing liquid silk — now a pure CSS gradient, no SVG filter */
 .liquid-fx {
-  display: none; /* removed — was the #1 GPU bottleneck (feTurbulence+feDisplacementMap+feGaussianBlur on full viewport) */
+  display: none;
 }
 
-/* Only 2 orbs instead of 4 — reduced size and blur for GPU efficiency */
 .ambient .orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(40px);        /* was 80px — cut in half */
-  opacity: 0.45;             /* was 0.55 — slightly softer */
+  filter: blur(80px);
+  opacity: 0.2;
   mix-blend-mode: multiply;
-  content-visibility: auto;  /* skip rendering when off-screen */
+  content-visibility: auto;
   contain: paint;
-  /* will-change removed — promotes to GPU layer but 4 large elements = VRAM pressure */
 }
 .paper.mono ~ .ambient .orb {
   background: radial-gradient(circle, #888 0%, transparent 70%) !important;
-  opacity: 0.18;
-  mix-blend-mode: multiply;
+  opacity: 0.1;
 }
-/* Orb 1 — top-left warm anchor (kept) */
+
 .ambient .o1 {
-  width: 420px; height: 420px;    /* was 520px */
-  left: -80px; top: -100px;
-  background: radial-gradient(circle, var(--accent-amber) 0%, transparent 70%);
-  animation: drift-1 28s ease-in-out infinite;  /* slowed from 22s — fewer frames/sec */
+  width: 600px; height: 600px;
+  left: 20%; top: -200px;
+  background: radial-gradient(circle, var(--accent-amber) 0%, transparent 60%);
+  animation: drift-1 40s ease-in-out infinite alternate;
 }
-/* Orb 2 — bottom right warm accent (kept) */
+
 .ambient .o2 {
-  width: 360px; height: 360px;    /* was 460px */
-  right: -60px; bottom: 0;
-  background: radial-gradient(circle, var(--accent-coral) 0%, transparent 70%);
-  animation: drift-2 34s ease-in-out infinite;  /* slowed from 28s */
+  width: 500px; height: 500px;
+  right: -100px; bottom: -100px;
+  background: radial-gradient(circle, var(--accent-coral) 0%, transparent 60%);
+  animation: drift-2 50s ease-in-out infinite alternate;
 }
-/* Orbs 3 & 4 REMOVED — were the largest and most GPU-expensive */
+
 .ambient .o3 { display: none; }
 .ambient .o4 { display: none; }
 
 @keyframes drift-1 {
-  0%, 100% { transform: translate(0, 0) }
-  50%      { transform: translate(80px, 60px) }    /* simplified from 3-keyframe drift */
+  0%   { transform: translate(0, 0) scale(1) }
+  100% { transform: translate(100px, 50px) scale(1.1) }
 }
 @keyframes drift-2 {
-  0%, 100% { transform: translate(0, 0) }
-  50%      { transform: translate(-80px, -60px) }
+  0%   { transform: translate(0, 0) scale(1) }
+  100% { transform: translate(-100px, -50px) scale(1.1) }
 }
 
 /* deckle edge */
@@ -988,42 +981,21 @@ body.focus-active .top-bar-awards {
    AWWWARDS-LEVEL UPGRADE ADDITIONS
    ═════════════════════════════════════════════════════════════ */
 
-/* ─── Animated gradient mesh background layer ──────────────── */
+/* ─── Static gradient mesh background layer ──────────────── */
 .gradient-mesh {
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(at 0% 0%, rgba(245,165,36,0.25) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(231,64,46,0.20) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(194,24,91,0.15) 0px, transparent 50%),
-    radial-gradient(at 0% 100%, rgba(240,107,28,0.20) 0px, transparent 50%);
-  background-size: 120% 120%;
-  animation: gradient-shift 18s ease-in-out infinite alternate;
-}
-@keyframes gradient-shift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+    radial-gradient(at 0% 0%, rgba(245,165,36,0.1) 0px, transparent 40%),
+    radial-gradient(at 100% 0%, rgba(231,64,46,0.1) 0px, transparent 40%),
+    radial-gradient(at 100% 100%, rgba(194,24,91,0.05) 0px, transparent 40%),
+    radial-gradient(at 0% 100%, rgba(240,107,28,0.1) 0px, transparent 40%);
 }
 
-/* ─── Noise overlay (animated with tiny opacity pulse) ─────── */
 .noise-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.035;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  background-repeat: repeat;
-  background-size: 256px 256px;
-  animation: noise-drift 0.5s steps(4) infinite;
-}
-@keyframes noise-drift {
-  0% { background-position: 0 0; }
-  100% { background-position: 256px 256px; }
+  display: none;
 }
 
 /* ─── Page transition wrapper ──────────────────────────────── */

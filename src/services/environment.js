@@ -1,3 +1,4 @@
+// Forced HMR reload to clear Vite cache issue
 const SIGNAL_PATTERNS = {
   energy: {
     low: [

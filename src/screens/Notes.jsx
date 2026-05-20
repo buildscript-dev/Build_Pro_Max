@@ -160,7 +160,7 @@ export const Notes = () => {
 
   // ── AI analysis (local, rule-based) ─────────────────────────────────────────
   const runAiAnalysis = (content, noteId) => {
-    if (!content.trim()) return;
+    if (!content || !content.trim()) return;
 
     let tag = 'General';
     let icon = 'notes';
@@ -652,7 +652,7 @@ export const Notes = () => {
                 ) : (
                   <div className="scroll" style={{ flex: 1, overflowY: 'auto' }}>
                     {/* Note header */}
-                    <div style={{ padding: '28px 40px 0' }}>
+                    <div style={{ padding: '28px clamp(16px, 5vw, 40px) 0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
                         <select
                           value={selected.tag || 'General'}
@@ -698,7 +698,7 @@ export const Notes = () => {
                         onChange={e => handleTitleChange(e.target.value)}
                         placeholder="Untitled"
                         style={{
-                          all: 'unset', display: 'block', fontSize: 36, fontFamily: 'var(--font-display)',
+                          all: 'unset', display: 'block', fontSize: 'clamp(28px, 6vw, 36px)', fontFamily: 'var(--font-display)',
                           fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1.15,
                           color: 'var(--ink-1)', width: '100%',
                         }}
@@ -706,7 +706,7 @@ export const Notes = () => {
                     </div>
 
                     {/* Content */}
-                    <div style={{ padding: '0 40px 40px' }}>
+                    <div style={{ padding: '0 clamp(16px, 5vw, 40px) 40px' }}>
                       <div className="hair" style={{ margin: '16px 0 22px' }} />
                       <NoteEditor
                         value={selected.content ?? selected.preview ?? ''}

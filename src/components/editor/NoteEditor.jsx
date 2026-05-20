@@ -66,6 +66,15 @@ export function markdownToBlocks(md) {
         i++;
       }
       blocks.push({ id: genId(), type: 'code', html: codeLines.join('\n'), text: codeLines.join('\n'), lang });
+    } else if (line.trimStart().startsWith(':::container')) {
+      const linesArr = [];
+      i++;
+      while (i < lines.length && !lines[i].trimStart().startsWith(':::')) {
+        linesArr.push(lines[i]);
+        i++;
+      }
+      const ctext = linesArr.join('\n');
+      blocks.push({ id: genId(), type: 'container', html: ctext, text: ctext });
     } else if (line.startsWith('### ')) {
       blocks.push({ id: genId(), type: 'h3', html: line.slice(4), text: line.slice(4) });
     } else if (line.startsWith('## ')) {
@@ -110,30 +119,13 @@ export function blocksToMarkdown(blocks) {
       case 'todo': return `- [${b.checked ? 'x' : ' '}] ${text}`;
       case 'quote': return `> ${text}`;
       case 'code': return '```' + (b.lang && b.lang !== 'code' ? b.lang : '') + '\n' + (b.text || '') + '\n```';
+      case 'container': return `:::container\n${b.text || ''}\n:::`;
       case 'divider': return '---';
       case 'image': return `![${b.alt || ''}](${b.url || ''})`;
       default: return text;
     }
   }).filter(s => s != null).join('\n\n');
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Slash command options
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SLASH_OPTIONS = [
-  { type: 'p',        icon: '¶',    label: 'Text',          desc: 'Plain paragraph' },
-  { type: 'h1',       icon: 'H1',   label: 'Heading 1',     desc: 'Big section header' },
-  { type: 'h2',       icon: 'H2',   label: 'Heading 2',     desc: 'Medium subheading' },
-  { type: 'h3',       icon: 'H3',   label: 'Heading 3',     desc: 'Small subheading' },
-  { type: 'bullet',   icon: '•',    label: 'Bullet list',   desc: 'Unordered list item' },
-  { type: 'numbered', icon: '1.',   label: 'Numbered list', desc: 'Ordered list item' },
-  { type: 'todo',     icon: '☐',   label: 'To-do',         desc: 'Checkbox task item' },
-  { type: 'quote',    icon: '"',    label: 'Quote',         desc: 'Blockquote text' },
-  { type: 'code',     icon: '</>',  label: 'Code block',    desc: 'Monospace code area' },
-  { type: 'image',    icon: '🖼',   label: 'Image',         desc: 'Embed image from URL' },
-  { type: 'divider',  icon: '—',   label: 'Divider',       desc: 'Horizontal separator' },
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Style helpers
@@ -149,6 +141,7 @@ function wrapStyle(type) {
     case 'numbered': return { ...base, display: 'flex', alignItems: 'flex-start', gap: 8 };
     case 'todo': return { ...base, display: 'flex', alignItems: 'flex-start', gap: 8 };
     case 'code': return { ...base, marginTop: 6, marginBottom: 6 };
+    case 'container': return { ...base, padding: 14, background: 'rgba(26,20,16,.04)', border: '0.5px solid var(--ink-line)', borderRadius: 10, margin: '8px 0' };
     case 'quote': return { ...base, borderLeft: '3px solid var(--accent-orange)', paddingLeft: 14, margin: '2px 0' };
     case 'image': return { ...base, margin: '6px 0' };
     case 'divider': return { ...base, margin: '10px 0' };
@@ -167,6 +160,7 @@ function editStyle(type, checked) {
     case 'todo': return { ...base, flex: 1, fontSize: 15, lineHeight: 1.65, textDecoration: checked ? 'line-through' : 'none', color: checked ? 'var(--ink-3)' : 'var(--ink-1)' };
     case 'quote': return { ...base, fontSize: 15, lineHeight: 1.7, fontStyle: 'italic', color: 'var(--ink-2)' };
     case 'code': return { ...base, fontFamily: '"Fira Code","Cascadia Code","Courier New",monospace', fontSize: 13, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-all' };
+    case 'container': return { ...base, fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap', minHeight: 60 };
     default: return { ...base, fontSize: 15, lineHeight: 1.7 };
   }
 }
@@ -180,8 +174,11 @@ function placeholder(type, isFirst) {
     case 'bullet': return 'List item…';
     case 'numbered': return 'List item…';
     case 'todo': return 'To-do item…';
-    case 'quote': return 'Quote…';
+    case 'quote': return 'Empty quote…';
+    case 'container': return 'Container... (Shift+Enter for newline)';
     case 'code': return 'Enter code…';
+    case 'image': return '';
+    case 'divider': return '';
     default: return "Type / for commands…";
   }
 }
@@ -192,8 +189,6 @@ function placeholder(type, isFirst) {
 
 export function NoteEditor({ value = '', onChange, readOnly = false }) {
   const [blocks, setBlocks] = useState(() => markdownToBlocks(value));
-  const [slash, setSlash] = useState(null);   // { blockId, top, left }
-  const [slashIdx, setSlashIdx] = useState(0);
   const [formatBar, setFormatBar] = useState(null); // { top, left }
   const blockRefs = useRef({});
   const editorRef = useRef(null);
@@ -212,12 +207,17 @@ export function NoteEditor({ value = '', onChange, readOnly = false }) {
     }
   }, [value]);
 
+  const debounceRef = useRef(null);
+
   // Serialize blocks → markdown → fire onChange
   const serialize = useCallback((nextBlocks) => {
     const md = blocksToMarkdown(nextBlocks);
     if (md !== serializedRef.current) {
       serializedRef.current = md;
-      onChange?.(md);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        onChange?.(md);
+      }, 300);
     }
   }, [onChange]);
 
@@ -291,46 +291,51 @@ export function NoteEditor({ value = '', onChange, readOnly = false }) {
     return () => document.removeEventListener('selectionchange', onSel);
   }, []);
 
-  // Close slash on outside click
+  // Close format bar on click outside
   useEffect(() => {
-    if (!slash) return;
-    const handler = (e) => { if (slashRef.current && !slashRef.current.contains(e.target)) setSlash(null); };
+    const handler = (e) => {
+      // Allow format bar buttons to be clicked
+      if (e.target.closest('button')) return;
+      if (editorRef.current && !editorRef.current.contains(e.target)) {
+        setFormatBar(null);
+      }
+    };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [slash]);
+  }, []);
 
-  // ── Apply slash command (pick block type) ──────────────────────────────────
-  const applySlash = useCallback((type) => {
-    if (!slash) return;
-    const { blockId } = slash;
-    setSlash(null);
+  const autoConvert = useCallback((blockId, newType) => {
     setBlocks(prev => {
       const idx = prev.findIndex(b => b.id === blockId);
       if (idx < 0) return prev;
       const newId = genId();
       const next = [...prev];
-      next[idx] = { id: newId, type, html: '', text: '', checked: false, number: type === 'numbered' ? 1 : undefined, url: '', alt: '', lang: 'code' };
+      next[idx] = { id: newId, type: newType, html: '', text: '', checked: false, url: '', alt: '', lang: 'code', number: newType === 'numbered' ? 1 : undefined };
       setTimeout(() => focusBlock(newId), 20);
-      serialize(next);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => onChange?.(blocksToMarkdown(next)), 300);
       return next;
     });
-  }, [slash, focusBlock, serialize]);
+  }, [focusBlock, onChange]);
 
   // ── onInput ────────────────────────────────────────────────────────────────
   const handleInput = useCallback((blockId, el) => {
     const blockType = blocksRef.current.find(b => b.id === blockId)?.type || 'p';
-    const isRich = blockType === 'p';
+    const isRich = blockType === 'p' || blockType === 'container';
     const html = isRich ? (el.innerHTML || '') : (el.textContent || '');
     const text = el.textContent || '';
 
-    if (text === '/') {
-      const rect = el.getBoundingClientRect();
-      const edRect = editorRef.current?.getBoundingClientRect();
-      setSlash({ blockId, top: rect.bottom - (edRect?.top ?? 0) + 4, left: rect.left - (edRect?.left ?? 0) });
-      setSlashIdx(0);
-    } else {
-      setSlash(null);
-    }
+    // Quick auto-convert commands
+    if (text === '/h' || text === '/h1') { autoConvert(blockId, 'h1'); return; }
+    if (text === '/h2') { autoConvert(blockId, 'h2'); return; }
+    if (text === '/h3') { autoConvert(blockId, 'h3'); return; }
+    if (text === '/img') { autoConvert(blockId, 'image'); return; }
+    if (text === '/c') { autoConvert(blockId, 'container'); return; }
+    if (text === '/quote') { autoConvert(blockId, 'quote'); return; }
+    if (text === '/code') { autoConvert(blockId, 'code'); return; }
+    if (text === '/todo' || text === '/[]') { autoConvert(blockId, 'todo'); return; }
+    if (text === '/bullet' || text === '/-') { autoConvert(blockId, 'bullet'); return; }
+    if (text === '/div' || text === '/--') { autoConvert(blockId, 'divider'); return; }
 
     setBlocks(prev => {
       const idx = prev.findIndex(b => b.id === blockId);
@@ -340,7 +345,7 @@ export function NoteEditor({ value = '', onChange, readOnly = false }) {
       serialize(next);
       return next;
     });
-  }, [serialize]);
+  }, [serialize, autoConvert]);
 
   // ── onKeyDown ──────────────────────────────────────────────────────────────
   const handleKeyDown = useCallback((e, blockId) => {
@@ -349,14 +354,6 @@ export function NoteEditor({ value = '', onChange, readOnly = false }) {
     const idx = currentBlocks.findIndex(b => b.id === blockId);
     const block = currentBlocks[idx];
     if (!block) return;
-
-    // Slash menu navigation
-    if (slash?.blockId === blockId) {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setSlashIdx(i => Math.min(i + 1, SLASH_OPTIONS.length - 1)); return; }
-      if (e.key === 'ArrowUp')   { e.preventDefault(); setSlashIdx(i => Math.max(i - 1, 0)); return; }
-      if (e.key === 'Enter')     { e.preventDefault(); applySlash(SLASH_OPTIONS[slashIdx].type); return; }
-      if (e.key === 'Escape')    { setSlash(null); return; }
-    }
 
     // Keyboard shortcuts
     if (e.metaKey || e.ctrlKey) {
@@ -373,7 +370,7 @@ export function NoteEditor({ value = '', onChange, readOnly = false }) {
 
     // Enter — create new block or split
     if (e.key === 'Enter' && !e.shiftKey) {
-      if (block.type === 'code') return; // let browser handle newline in code
+      if (block.type === 'code' || block.type === 'container') return; // let browser handle newline
       e.preventDefault();
 
       const isEmpty = !block.text?.trim();
@@ -453,7 +450,7 @@ export function NoteEditor({ value = '', onChange, readOnly = false }) {
       e.preventDefault();
       if (el) document.execCommand('insertText', false, '  ');
     }
-  }, [slash, slashIdx, applySlash, focusBlock, serialize]);
+  }, [focusBlock, serialize]);
 
   // ── Format toolbar actions ────────────────────────────────────────────────
   const execFmt = (cmd) => {
@@ -535,45 +532,6 @@ export function NoteEditor({ value = '', onChange, readOnly = false }) {
         <div onClick={addBlock} style={{ minHeight: 40, cursor: 'text' }} />
       )}
 
-      {/* Slash command popover */}
-      {slash && (
-        <div ref={slashRef} style={{
-          position: 'absolute', top: slash.top, left: slash.left, zIndex: 200,
-          background: 'rgba(255,254,250,.98)', backdropFilter: 'blur(20px)',
-          border: '0.5px solid var(--ink-line)', borderRadius: 14,
-          boxShadow: '0 12px 40px -8px rgba(46,30,12,.2), 0 1px 0 rgba(255,255,255,.8) inset',
-          padding: '6px 4px', width: 252, maxHeight: 360, overflowY: 'auto',
-        }}>
-          <div style={{ padding: '2px 12px 6px', fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--ink-3)' }}>
-            Block type
-          </div>
-          {SLASH_OPTIONS.map((opt, j) => (
-            <button
-              key={opt.type}
-              onMouseDown={(e) => { e.preventDefault(); applySlash(opt.type); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                padding: '7px 10px', margin: '1px 0',
-                background: j === slashIdx ? 'rgba(245,165,36,.12)' : 'transparent',
-                border: 'none', cursor: 'pointer', textAlign: 'left', borderRadius: 8,
-              }}
-              onMouseEnter={() => setSlashIdx(j)}
-            >
-              <span style={{
-                width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: 7, background: j === slashIdx ? 'rgba(245,165,36,.18)' : 'rgba(26,20,16,.05)',
-                fontSize: 11, fontWeight: 800, color: j === slashIdx ? 'var(--accent-orange)' : 'var(--ink-2)',
-                flexShrink: 0,
-              }}>{opt.icon}</span>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-1)' }}>{opt.label}</div>
-                <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 1 }}>{opt.desc}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* Floating format toolbar */}
       {formatBar && (
         <div style={{
@@ -630,7 +588,7 @@ const BlockRow = React.memo(function BlockRow({
   // Set initial content imperatively — avoids React controlling innerHTML (no cursor jump)
   useLayoutEffect(() => {
     if (!elRef.current || block.type === 'divider' || block.type === 'image') return;
-    if (block.type === 'p' || block.type === 'quote') {
+    if (block.type === 'p' || block.type === 'quote' || block.type === 'container') {
       elRef.current.innerHTML = block.html || '';
     } else {
       elRef.current.textContent = block.text || '';

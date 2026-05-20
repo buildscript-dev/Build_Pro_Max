@@ -38,7 +38,8 @@ function ContainerBlock({ el, isSelected, onSelect, onDrag, onResize, onContent 
   // ── Drag ────────────────────────────────────────────────────────────────────
   const onPointerDown = useCallback((e) => {
     if (e.button !== 0) return;
-    if (e.target.closest('[data-resize]') || e.target.closest('[data-edit]')) return;
+    if (e.target.closest('[data-resize]')) return;
+    if (editing) return; // Allow text selection when editing
     e.stopPropagation();
     onSelect();
     isDragging.current = true;
@@ -57,7 +58,7 @@ function ContainerBlock({ el, isSelected, onSelect, onDrag, onResize, onContent 
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
-  }, [el, onSelect, onDrag]);
+  }, [el, onSelect, onDrag, editing]);
 
   // ── Resize ──────────────────────────────────────────────────────────────────
   const onResizeDown = useCallback((dir, e) => {
@@ -111,7 +112,7 @@ function ContainerBlock({ el, isSelected, onSelect, onDrag, onResize, onContent 
           onKeyDown={(e) => { if (e.key === 'Escape') saveEdit(); if (e.key === 'Enter' && el.type !== 'code' && !e.shiftKey) saveEdit(); }}
           data-edit="true"
           style={{
-            all: 'unset', width: '100%', height: '100', display: 'block',
+            all: 'unset', width: '100%', height: '100%', display: 'block',
             fontSize: el.type === 'title' ? 28 : el.type === 'code' ? 13 : 14,
             fontFamily: el.type === 'code' ? 'ui-monospace, monospace' : 'inherit',
             color: 'var(--ink-1)', lineHeight: 1.5, resize: 'none',
@@ -322,11 +323,20 @@ export function NoteCanvas({ value = '', onChange, readOnly = false }) {
     } catch { /* ignore */ }
   }, []);
 
+  const debounceRef = useRef(null);
+
+  const persist = useCallback((els) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      onChange?.(JSON.stringify(els));
+    }, 400);
+  }, [onChange]);
+
   // ── Persist changes ─────────────────────────────────────────────────────────
   const sync = useCallback((els) => {
     setElements(els);
-    onChange?.(JSON.stringify(els));
-  }, [onChange]);
+    persist(els);
+  }, [persist]);
 
   // ── Add element from toolbar ────────────────────────────────────────────────
   const addElement = useCallback((typeDef) => {
@@ -352,25 +362,30 @@ export function NoteCanvas({ value = '', onChange, readOnly = false }) {
 
   // ── Drag handler ────────────────────────────────────────────────────────────
   const handleDrag = useCallback((id, x, y) => {
-    setElements(prev => prev.map(e => e.id === id ? { ...e, x, y } : e));
-  }, []);
+    setElements(prev => {
+      const next = prev.map(e => e.id === id ? { ...e, x, y } : e);
+      persist(next);
+      return next;
+    });
+  }, [persist]);
 
   // ── Resize handler ──────────────────────────────────────────────────────────
   const handleResize = useCallback((id, x, y, w, h) => {
-    setElements(prev => prev.map(e => e.id === id ? { ...e, x, y, width: w, height: h } : e));
-  }, []);
+    setElements(prev => {
+      const next = prev.map(e => e.id === id ? { ...e, x, y, width: w, height: h } : e);
+      persist(next);
+      return next;
+    });
+  }, [persist]);
 
   // ── Content change ──────────────────────────────────────────────────────────
   const handleContent = useCallback((id, content) => {
-    setElements(prev => prev.map(e => e.id === id ? { ...e, content } : e));
-    // Persist immediately
-    setTimeout(() => {
-      setElements(current => {
-        onChange?.(JSON.stringify(current));
-        return current;
-      });
-    }, 0);
-  }, [onChange]);
+    setElements(prev => {
+      const next = prev.map(e => e.id === id ? { ...e, content } : e);
+      persist(next);
+      return next;
+    });
+  }, [persist]);
 
   // ── Delete selected ─────────────────────────────────────────────────────────
   useEffect(() => {
