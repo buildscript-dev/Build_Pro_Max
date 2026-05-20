@@ -14,6 +14,7 @@ export const BottomNav = ({ active, onSelect, onOpenCmdK, hasNotifications = fal
   return (
     <nav
       aria-label="Mobile navigation"
+      className="mobile-bottom-nav"
       style={{
         position: 'fixed',
         bottom: 0,

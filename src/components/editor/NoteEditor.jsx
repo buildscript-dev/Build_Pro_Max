@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { EmbeddedCanvas } from './EmbeddedCanvas';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utilities
@@ -152,9 +153,9 @@ function wrapStyle(type) {
 function editStyle(type, checked) {
   const base = { outline: 'none', wordBreak: 'break-word', minHeight: '1.4em', color: 'var(--ink-1)' };
   switch (type) {
-    case 'h1': return { ...base, fontSize: 28, fontWeight: 700, lineHeight: 1.25, letterSpacing: '-0.02em', fontFamily: 'var(--font-display)' };
-    case 'h2': return { ...base, fontSize: 22, fontWeight: 650, lineHeight: 1.3 };
-    case 'h3': return { ...base, fontSize: 17, fontWeight: 600, lineHeight: 1.4 };
+    case 'h1': return { ...base, fontSize: 'clamp(22px, 5vw, 28px)', fontWeight: 700, lineHeight: 1.25, letterSpacing: '-0.02em', fontFamily: 'var(--font-display)' };
+    case 'h2': return { ...base, fontSize: 'clamp(18px, 4vw, 22px)', fontWeight: 650, lineHeight: 1.3 };
+    case 'h3': return { ...base, fontSize: 'clamp(15px, 3.5vw, 17px)', fontWeight: 600, lineHeight: 1.4 };
     case 'bullet':
     case 'numbered': return { ...base, flex: 1, fontSize: 15, lineHeight: 1.65 };
     case 'todo': return { ...base, flex: 1, fontSize: 15, lineHeight: 1.65, textDecoration: checked ? 'line-through' : 'none', color: checked ? 'var(--ink-3)' : 'var(--ink-1)' };
@@ -304,13 +305,26 @@ export function NoteEditor({ value = '', onChange, readOnly = false }) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const autoConvert = useCallback((blockId, newType) => {
+  const autoConvert = useCallback((blockId, newType, fullText, cmdStr) => {
     setBlocks(prev => {
       const idx = prev.findIndex(b => b.id === blockId);
       if (idx < 0) return prev;
+      const currentBlock = prev[idx];
+      const textBefore = fullText.slice(0, -cmdStr.length).trim();
+      
       const newId = genId();
       const next = [...prev];
-      next[idx] = { id: newId, type: newType, html: '', text: '', checked: false, url: '', alt: '', lang: 'code', number: newType === 'numbered' ? 1 : undefined };
+      
+      if (textBefore) {
+        // Keep existing block content, insert new block after it
+        next[idx] = { ...currentBlock, text: textBefore, html: textBefore };
+        const newBlock = { id: newId, type: newType, html: '', text: '', checked: false, url: '', alt: '', lang: 'code', number: newType === 'numbered' ? 1 : undefined };
+        next.splice(idx + 1, 0, newBlock);
+      } else {
+        // Replace current block entirely
+        next[idx] = { id: newId, type: newType, html: '', text: '', checked: false, url: '', alt: '', lang: 'code', number: newType === 'numbered' ? 1 : undefined };
+      }
+
       setTimeout(() => focusBlock(newId), 20);
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => onChange?.(blocksToMarkdown(next)), 300);
@@ -325,17 +339,26 @@ export function NoteEditor({ value = '', onChange, readOnly = false }) {
     const html = isRich ? (el.innerHTML || '') : (el.textContent || '');
     const text = el.textContent || '';
 
-    // Quick auto-convert commands
-    if (text === '/h' || text === '/h1') { autoConvert(blockId, 'h1'); return; }
-    if (text === '/h2') { autoConvert(blockId, 'h2'); return; }
-    if (text === '/h3') { autoConvert(blockId, 'h3'); return; }
-    if (text === '/img') { autoConvert(blockId, 'image'); return; }
-    if (text === '/c') { autoConvert(blockId, 'container'); return; }
-    if (text === '/quote') { autoConvert(blockId, 'quote'); return; }
-    if (text === '/code') { autoConvert(blockId, 'code'); return; }
-    if (text === '/todo' || text === '/[]') { autoConvert(blockId, 'todo'); return; }
-    if (text === '/bullet' || text === '/-') { autoConvert(blockId, 'bullet'); return; }
-    if (text === '/div' || text === '/--') { autoConvert(blockId, 'divider'); return; }
+    // Helper to check and convert commands anywhere (empty block or at the end of a line)
+    const checkCmd = (cmd, type) => {
+      if (text === cmd || text.endsWith('\n' + cmd)) {
+        autoConvert(blockId, type, text, cmd);
+        return true;
+      }
+      return false;
+    };
+
+    if (
+      checkCmd('/h1', 'h1') || checkCmd('/h', 'h1') ||
+      checkCmd('/h2', 'h2') || checkCmd('/h3', 'h3') ||
+      checkCmd('/img', 'image') || checkCmd('/c', 'container') ||
+      checkCmd('/quote', 'quote') || checkCmd('/code', 'code') ||
+      checkCmd('/todo', 'todo') || checkCmd('/[]', 'todo') ||
+      checkCmd('/bullet', 'bullet') || checkCmd('/-', 'bullet') ||
+      checkCmd('/div', 'divider') || checkCmd('/--', 'divider')
+    ) {
+      return;
+    }
 
     setBlocks(prev => {
       const idx = prev.findIndex(b => b.id === blockId);
@@ -481,6 +504,14 @@ export function NoteEditor({ value = '', onChange, readOnly = false }) {
     });
   }, [serialize]);
 
+  const commitContainer = useCallback((blockId, jsonStr) => {
+    setBlocks(prev => {
+      const next = prev.map(b => b.id === blockId ? { ...b, text: jsonStr, html: jsonStr } : b);
+      serialize(next);
+      return next;
+    });
+  }, [serialize]);
+
   // ── Add empty paragraph at end ────────────────────────────────────────────
   const addBlock = () => {
     const newId = genId();
@@ -522,6 +553,7 @@ export function NoteEditor({ value = '', onChange, readOnly = false }) {
             onKeyDown={handleKeyDown}
             onToggleTodo={toggleTodo}
             onImageUrl={commitImage}
+            onContainerChange={commitContainer}
             readOnly={readOnly}
           />
         ))}
@@ -574,7 +606,7 @@ export function NoteEditor({ value = '', onChange, readOnly = false }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const BlockRow = React.memo(function BlockRow({
-  block, isFirst, blockRef, onInput, onKeyDown, onToggleTodo, onImageUrl, readOnly,
+  block, isFirst, blockRef, onInput, onKeyDown, onToggleTodo, onImageUrl, onContainerChange, readOnly,
 }) {
   const elRef = useRef(null);
   const [imgUrl, setImgUrl] = useState(block.url || '');
@@ -587,8 +619,8 @@ const BlockRow = React.memo(function BlockRow({
 
   // Set initial content imperatively — avoids React controlling innerHTML (no cursor jump)
   useLayoutEffect(() => {
-    if (!elRef.current || block.type === 'divider' || block.type === 'image') return;
-    if (block.type === 'p' || block.type === 'quote' || block.type === 'container') {
+    if (!elRef.current || block.type === 'divider' || block.type === 'image' || block.type === 'container') return;
+    if (block.type === 'p' || block.type === 'quote') {
       elRef.current.innerHTML = block.html || '';
     } else {
       elRef.current.textContent = block.text || '';
@@ -599,6 +631,14 @@ const BlockRow = React.memo(function BlockRow({
     return (
       <div className="ne-block" style={{ padding: '4px 0' }}>
         <hr style={{ border: 'none', borderTop: '1.5px solid var(--ink-line)', margin: 0, borderRadius: 2 }} />
+      </div>
+    );
+  }
+
+  if (block.type === 'container') {
+    return (
+      <div className="ne-block" style={wrapStyle('container')}>
+        <EmbeddedCanvas data={block.text || block.html || ''} onChange={val => onContainerChange(block.id, val)} />
       </div>
     );
   }

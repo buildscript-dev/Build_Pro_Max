@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GlassCard, PaperButton, Avatar, Icon } from '../components/ui/Icons';
 import { accentColor } from '../data';
 import { useApp } from '../store/AppContext';
-import { clearSession, deleteAccount } from '../store/auth';
+import { logout, deleteAccount } from '../store/auth';
 import { connectGmail, disconnectGmail, isGmailConnected, getGmailEmail } from '../services/gmail';
 import { connectNotion, disconnectNotion, isNotionConnected, getNotionEmail, getNotionWorkspace } from '../services/notion';
 import { requestNotificationPermission } from '../services/clock';
@@ -104,19 +104,16 @@ export const Settings = ({ onShowAuth, onLogout: _onLogout }) => {
     actions.addNotification({ text: result === 'granted' ? 'Notifications enabled' : 'Notifications denied', kind: 'info' });
   };
 
-  const handleLogout = () => {
-    clearSession();
+  const handleLogout = async () => {
+    await logout();
     if (ctxLogout) ctxLogout();
   };
 
   const handleDeleteAccount = async () => {
-    if (window.confirm('Are you sure? This will permanently delete your account and all local data.')) {
-      await deleteAccount(authUser?.email || '');
-      // Only clear app-specific keys, not all localStorage
+    if (window.confirm('Are you sure? This will permanently delete your account and all data.')) {
+      await deleteAccount();
       const appKeys = [
         'build_pro_max_1_state',
-        'auth_session',
-        'auth_users',
         'openrouter_api_key',
         'ai_personality',
         'gmail_access_token',
@@ -129,6 +126,7 @@ export const Settings = ({ onShowAuth, onLogout: _onLogout }) => {
         'onboarding_complete',
       ];
       appKeys.forEach(key => localStorage.removeItem(key));
+      if (ctxLogout) ctxLogout();
       window.location.reload();
     }
   };

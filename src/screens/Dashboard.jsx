@@ -136,7 +136,7 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
         marginBottom: 'var(--gap-grid)', gap: 'var(--gap-grid)',
         paddingLeft: 4, paddingRight: 4,
         flexWrap: "wrap",
-      }}>
+      }} className="dashboard-header">
         <div>
           <div className="t-cap" style={{ marginBottom: 6 }}>
             <span style={{ color: "var(--accent-orange)" }}>●</span>  {D.today.weekOf}
@@ -214,7 +214,7 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
   );
 };
 
-const DraggableBentoCard = ({ card, data, containerRef, onExpand, onClick, onNavigate, tweaks, index = 0, actions }) => {
+const DraggableBentoCard = React.memo(({ card, data, containerRef, onExpand, onClick, onNavigate, tweaks, index = 0, actions }) => {
   const [drag, setDrag] = useState({ x: 0, y: 0, active: false });
   const [proximity, setProximity] = useState(0);
   const ref = useRef(null);
@@ -317,7 +317,7 @@ const DraggableBentoCard = ({ card, data, containerRef, onExpand, onClick, onNav
       </GlassCard>
     </div>
   );
-};
+});
 
 const ExpandedCard = ({ card, data, onClose, onNavigate, actions }) => {
   useEffect(() => {
@@ -383,7 +383,7 @@ function HelloCard({ data, expanded, accent }) {
     : mode === 'offline' ? '🔕 Off the grid'
     : null;
 
-  return (
+  return React.useMemo(() => (
     <div style={{ padding: expanded ? 0 : 24, height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
       <div>
         <div className="t-cap" style={{ color: accent }}>
@@ -402,7 +402,7 @@ function HelloCard({ data, expanded, accent }) {
         <span className="t-mono" style={{ fontSize: 11, color: "var(--ink-3)" }}>{data.today.weather}</span>
       </div>
     </div>
-  );
+  ), [data.today.bigRock, data.today.weather, expanded, accent, mode, envGreeting]);
 }
 
 function FocusCard({ data, expanded, accent }) {

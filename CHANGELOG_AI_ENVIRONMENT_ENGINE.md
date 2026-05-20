@@ -112,7 +112,7 @@
 | Todo checkboxes | Clickable checkbox with strikethrough on completion |
 | Code blocks | Monospace pre with language label header |
 | Image embedding | URL input → inline image display with edit button |
-| Divider | Horizontal rule |
+| Divider | Horizontal rule |W
 | Tab for indent | Two spaces inserted in list items |
 
 ### 3. Modified: `src/screens/Notes.jsx` — Full Environment Integration (876 lines)

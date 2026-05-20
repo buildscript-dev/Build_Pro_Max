@@ -529,10 +529,8 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
         due.forEach(r => {
           if (firedRef.current.has(r.id)) return;
           firedRef.current.add(r.id);
-          // Mark the reminder as fired in state so checkDueReminders skips it too
-          actions.updateTask && null; // no-op, just to use actions ref
           sendNotification(r.title || 'Reminder', { body: r.text || r.title || '' });
-          dispatch({ type: 'ADD_NOTIFICATION', payload: { text: `⏰ ${r.title || 'Reminder'}`, kind: 'info' } });
+          dispatch({ type: 'ADD_NOTIFICATION', payload: { text: `Reminder: ${r.title || 'Reminder'}`, kind: 'info' } });
         });
       }
     }, 60000);

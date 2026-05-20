@@ -6,7 +6,7 @@ import { BottomNav } from './components/navigation/BottomNav';
 import { AiOrb } from './components/ui/Icons';
 import { Dashboard } from './screens/Dashboard';
 import { Auth } from './screens/Auth';
-import { clearSession } from './store/auth';
+import { logout } from './store/auth';
 import { AmbientVideo } from './components/effects/AmbientVideo';
 import { PageTransition } from './components/effects/PageTransition';
 import { FocusPanel } from './components/focus/FocusPanel';
@@ -98,8 +98,8 @@ export default function App() {
     }
   }, [authUser]);
 
-  const handleLogout = useCallback(() => {
-    clearSession();
+  const handleLogout = useCallback(async () => {
+    await logout();
     onLogout();
     setShowAuth(true);
     setShowOnboarding(false);

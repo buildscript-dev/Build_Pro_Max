@@ -161,7 +161,8 @@ body {
     #ececec;
 }
 .paper.mono::before {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.15 0 0 0 0 0.15 0 0 0 0 0.15 0 0 0 0.40 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyBAMAAADsEZWCAAAAGFBMVEUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/p62RAAAACHRSTlMAAAAA/////wD/t7s2AAAAZklEQVQ4y2NgQAX8DIxoQh6G0ox8jCgCA372/2A+IyPz/z//Gf7//88w/v//H8ZnjIwwI97//88w//8/hvH//3+Gv//xR/7//x/D//9jGN///2f///8/xj//xzD//38Mo//xRwwCAHkF+z3JpS9WAAAAAElFTkSuQmCC");
+  opacity: 0.04;
 }
 .paper.mono::after {
   background-image:
@@ -224,7 +225,6 @@ body {
 .ambient .orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(80px);
   opacity: 0.2;
   mix-blend-mode: multiply;
   content-visibility: auto;
@@ -251,6 +251,30 @@ body {
 
 .ambient .o3 { display: none; }
 .ambient .o4 { display: none; }
+
+@media (max-width: 767px) {
+  .ambient .o1 {
+    width: 250px; height: 250px;
+    opacity: 0.12;
+    animation-duration: 60s;
+  }
+  .ambient .o2 {
+    width: 200px; height: 200px;
+    opacity: 0.1;
+    animation-duration: 70s;
+  }
+}
+
+@media (max-width: 374px) {
+  .ambient .o1 {
+    width: 180px; height: 180px;
+    opacity: 0.08;
+  }
+  .ambient .o2 {
+    width: 150px; height: 150px;
+    opacity: 0.06;
+  }
+}
 
 @keyframes drift-1 {
   0%   { transform: translate(0, 0) scale(1) }
@@ -487,11 +511,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 
 /* ─── Scrollbar ────────────────────────────────────────────── */
 .scroll {
-  overflow: auto;
-  min-height: 0;
-  overscroll-behavior: contain;
+  flex: 1;
+  overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: rgba(26,20,16,.18) transparent;
 }
@@ -574,7 +596,39 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 @keyframes pop-in  { from { opacity: 0; transform: translateY(-6px) scale(.985) } to { opacity: 1; transform: none } }
 
 /* ─── Performance: reduce ambient orb blur overhead ────────── */
-.ambient .orb { filter: blur(40px); }  /* unified blur value — removed duplicate 60px override */
+.ambient .orb { filter: blur(40px); will-change: transform; }
+
+@media (max-width: 767px) {
+  .ambient .orb {
+    filter: blur(20px);
+    will-change: auto;
+  }
+}
+
+/* ─── Performance: reduce backdrop-filter on mobile ────────── */
+@media (max-width: 767px) {
+  .glass {
+    backdrop-filter: blur(8px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(120%) !important;
+  }
+  .glass-pane {
+    background: rgba(255, 252, 244, 0.85) !important;
+  }
+  .top-bar-awards {
+    backdrop-filter: blur(8px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(140%) !important;
+  }
+  .dock-awards {
+    backdrop-filter: blur(8px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(140%) !important;
+  }
+}
+
+/* content-visibility for off-screen cards */
+.card-rise {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 200px;
+}
 
 /* ─── Focus Modes ────────────────────────────────────────── */
 body.focus-execution .scroll {
@@ -687,6 +741,18 @@ body.focus-active .top-bar-awards {
 
 /* ─── Responsive: Mobile (≤ 767px) ───────────────────────── */
 @media (max-width: 767px) {
+  /* Dashboard header stacks vertically */
+  .dashboard-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  .dashboard-header > div:last-child {
+    width: 100% !important;
+    overflow-x: auto !important;
+    padding-bottom: 4px !important;
+  }
+
   /* Safe area insets for notched phones */
   :root {
     --safe-top: env(safe-area-inset-top, 0px);
@@ -767,34 +833,30 @@ body.focus-active .top-bar-awards {
     grid-template-columns: 1fr !important;
   }
 
-  /* Hide desktop dock on mobile */
-  /* Mobile nav will be shown instead */
-
   /* Show bottom nav on mobile, hide dock */
-  nav[aria-label="Mobile navigation"] {
+  .mobile-bottom-nav {
     display: flex !important;
   }
 
   /* Hide desktop dock on mobile */
-  div[style*="bottom: 18px"][style*="translateX(-50%)"] {
+  .dock-awards {
     display: none !important;
   }
 
   /* TopBar: simplify */
-  div[style*="top: 14px"] {
-    height: 56px !important;
+  .top-bar-awards {
+    height: 52px !important;
     padding-left: 12px !important;
-    padding-right: 12px !important;
-  }
-
-  /* Hide search bar text on mobile */
-  div[style*="top: 14px"] button span { display: none; }
-  div[style*="top: 14px"] .chip { display: none !important; }
-  div[style*="top: 14px"] > button:first-child > div:last-child { display: none !important; }
-  div[style*="top: 14px"] {
+    padding-right: 8px !important;
     left: 10px !important;
     right: 10px !important;
+    top: 10px !important;
   }
+
+  /* Hide search bar text on mobile, keep icon */
+  .top-bar-awards button span:not(:first-child) { display: none; }
+  .top-bar-awards .chip { display: none !important; }
+  .top-bar-awards > div[style*="flex-direction: column"] { display: none !important; }
 
   /* Touch-friendly: minimum 44px touch targets */
   button {
@@ -1098,8 +1160,8 @@ body.focus-active .top-bar-awards {
 /* ─── Top bar glass upgrade ────────────────────────────────── */
 .top-bar-awards {
   background: rgba(255, 252, 244, 0.35) !important;
-  backdrop-filter: blur(32px) saturate(160%) !important;
-  -webkit-backdrop-filter: blur(32px) saturate(160%) !important;
+  backdrop-filter: blur(12px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(160%) !important;
   border: 0.5px solid rgba(255,255,255,.55) !important;
   box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 12px 40px -12px rgba(46,30,12,.22) !important;
   transition: background 300ms var(--ease-glass), box-shadow 300ms var(--ease-glass) !important;
@@ -1112,8 +1174,8 @@ body.focus-active .top-bar-awards {
 /* ─── Dock glass upgrade ───────────────────────────────────── */
 .dock-awards {
   background: rgba(255, 252, 244, 0.40) !important;
-  backdrop-filter: blur(32px) saturate(170%) !important;
-  -webkit-backdrop-filter: blur(32px) saturate(170%) !important;
+  backdrop-filter: blur(12px) saturate(170%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(170%) !important;
   border: 0.5px solid rgba(255,255,255,.60) !important;
   box-shadow:
     0 2px 1px rgba(255,255,255,.85) inset,

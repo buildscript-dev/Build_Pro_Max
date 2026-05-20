@@ -11,13 +11,15 @@ function mag(distance, max = 1.5, falloff = 110) {
 export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, onOpenFocus, focusMode = "off", recentActions = [], hasNotifications = false }) => {
   const [mouseX, setMouseX] = useState(null);
   const [itemRects, setItemRects] = useState({});
+  const [hoveredId, setHoveredId] = useState(null);
   const ref = useRef(null);
   const itemRefs = useRef({});
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
   if (variant === "rail") return <SideRail active={active} onSelect={onSelect} onOpenCmdK={onOpenCmdK} onOpenFocus={onOpenFocus} focusMode={focusMode} hasNotifications={hasNotifications} />;
   if (variant === "top") return null;
+  if (isMobile) return null;
 
-  // Measure item positions only when mouse enters/leaves dock (not on every render)
   useEffect(() => {
     if (mouseX === null) return;
     const rects = {};
@@ -39,8 +41,8 @@ export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, onOpenFoc
       className="dock-awards"
       style={{
         position: "fixed", left: "50%", bottom: 18, transform: "translateX(-50%)",
-        zIndex: 50, display: "flex", alignItems: "flex-end", gap: 4,
-        padding: "10px 14px",
+        zIndex: 50, display: "flex", alignItems: "flex-end", gap: 8,
+        padding: "12px 20px",
         background: "rgba(255, 252, 244, 0.55)",
         backdropFilter: "blur(28px) saturate(180%)",
         WebkitBackdropFilter: "blur(28px) saturate(180%)",
@@ -71,8 +73,9 @@ export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, onOpenFoc
             <button
               ref={(el) => {if (el) itemRefs.current[item.id] = el;}}
               onClick={() => onSelect(item.id)}
-              title={item.label}
               aria-label={item.label}
+              onMouseEnter={() => setHoveredId(item.id)}
+              onMouseLeave={() => setHoveredId(null)}
               className="magnetic-btn"
               style={{
                 width: base, height: base, borderRadius: 12,
@@ -110,7 +113,7 @@ export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, onOpenFoc
                 }} />
               )}
             </button>
-            {scale > 1.15 &&
+            {hoveredId === item.id &&
             <div style={{
               position: "absolute", left: "50%", bottom: 60 + lift + 6,
               transform: "translateX(-50%)",
@@ -119,7 +122,8 @@ export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, onOpenFoc
               color: "#fff8e8", fontSize: 11, fontWeight: 500,
               whiteSpace: "nowrap", pointerEvents: "none",
               boxShadow: "0 8px 20px -4px rgba(0,0,0,.3)",
-              animation: 'pop-in 180ms var(--ease-genie) both'
+              animation: 'pop-in 180ms var(--ease-genie) both',
+              zIndex: 100
             }}>{item.label}</div>
             }
             {isActive &&
@@ -172,7 +176,6 @@ const SideRail = ({ active, onSelect, onOpenCmdK, onOpenFocus, focusMode, hasNot
         return (
           <button key={item.id}
           onClick={() => onSelect(item.id)}
-          title={item.label}
           aria-label={item.label}
           style={{
             width: 40, height: 40, borderRadius: 10,

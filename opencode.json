@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "npx",
+      "args": ["-y", "@supabase/mcp-server@latest", "qnagdhnjxrttuitqnvwt"],
+      "env": {}
+    }
+  }
+}
