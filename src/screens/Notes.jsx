@@ -9,7 +9,7 @@ import {
 } from '../services/environment';
 import { NoteEditor } from '../components/editor/NoteEditor';
 import { EnvironmentBadge } from '../components/ui/EnvironmentBadge';
-import { CanvasBoard } from '../components/canvas/CanvasBoard';
+import { NoteCanvas } from '../components/editor/NoteCanvas';
 
 const TAGS = ['Fundraise', 'Hiring', 'Network', 'Pages', 'Reading', 'Product', 'General', 'Inbox', 'Design', 'Engineering', 'Gym', 'Personal', 'Learning'];
 
@@ -105,7 +105,6 @@ export const Notes = () => {
 
   // View + laser state
   const [viewMode, setViewMode] = useState('doc'); // 'doc' | 'canvas'
-  const [canvasElements, setCanvasElements] = useState([]);
   const [laserMode, setLaserMode] = useState(false);
   const [laserCursor, setLaserCursor] = useState({ x: 0, y: 0, visible: false });
   const laserPointsRef = useRef([]);
@@ -645,7 +644,11 @@ export const Notes = () => {
                 )}
 
                 {viewMode === 'canvas' ? (
-                  <CanvasBoard elements={canvasElements} onElementsChange={setCanvasElements} />
+                  <NoteCanvas
+                    value={selected.content ?? ''}
+                    onChange={(val) => actions.updateNote({ id: selectedId, content: val })}
+                    readOnly={isRecording}
+                  />
                 ) : (
                   <div className="scroll" style={{ flex: 1, overflowY: 'auto' }}>
                     {/* Note header */}

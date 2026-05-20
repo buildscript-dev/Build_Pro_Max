@@ -1,622 +1,483 @@
-import React, { useState, useRef, useCallback, useEffect, useLayoutEffect, memo } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 
-// ─── Utilities ────────────────────────────────────────────────────────────────
+// ─── ID generator ────────────────────────────────────────────────────────────────
 function genId() { return Math.random().toString(36).slice(2, 9); }
 
-// ─── Container type registry ──────────────────────────────────────────────────
-export const CONTAINER_TYPES = [
-  { type: 'title',   icon: 'T',    label: 'Title',   defaultW: 480, defaultH: 90  },
-  { type: 'text',    icon: '¶',    label: 'Text',    defaultW: 360, defaultH: 200 },
-  { type: 'sticky',  icon: '📌',   label: 'Sticky',  defaultW: 260, defaultH: 220 },
-  { type: 'image',   icon: '🖼',   label: 'Image',   defaultW: 320, defaultH: 260 },
-  { type: 'code',    icon: '</>',  label: 'Code',    defaultW: 400, defaultH: 220 },
-  { type: 'todo',    icon: '☐',    label: 'To-do',   defaultW: 300, defaultH: 210 },
-  { type: 'divider', icon: '—',    label: 'Divider', defaultW: 440, defaultH: 36  },
+// ─── Container type definitions ──────────────────────────────────────────────────
+const CONTAINER_TYPES = [
+  { type: 'title',   icon: 'T',    label: 'Title',   defaultW: 520, defaultH: 56,  defaultContent: 'Untitled' },
+  { type: 'text',    icon: '¶',    label: 'Text',    defaultW: 400, defaultH: 120, defaultContent: 'Start writing…' },
+  { type: 'sticky',  icon: '●',    label: 'Sticky',  defaultW: 220, defaultH: 180, defaultContent: 'Note…' },
+  { type: 'code',    icon: '<>',   label: 'Code',    defaultW: 420, defaultH: 160, defaultContent: 'const x = 0;' },
+  { type: 'todo',    icon: '☐',    label: 'To-do',   defaultW: 300, defaultH: 100, defaultContent: '' },
+  { type: 'divider', icon: '—',    label: 'Divider', defaultW: 400, defaultH: 12,  defaultContent: '' },
+  { type: 'image',   icon: '🖼',   label: 'Image',   defaultW: 320, defaultH: 220, defaultContent: '' },
+  { type: 'quote',   icon: '"',    label: 'Quote',   defaultW: 360, defaultH: 80,  defaultContent: '' },
 ];
 
-// ─── Serialization ────────────────────────────────────────────────────────────
-export function parseCanvas(value) {
-  try {
-    if (typeof value === 'string' && value.trimStart().startsWith('{')) {
-      const data = JSON.parse(value);
-      if (data.type === 'canvas' && Array.isArray(data.containers)) return data.containers;
+const STICKY_COLORS = ['#fef3c7', '#fce7f3', '#dbeafe', '#d1fae5', '#ede9fe', '#fee2e2'];
+
+// ─── Single container renderer ──────────────────────────────────────────────────
+function ContainerBlock({ el, isSelected, onSelect, onDrag, onResize, onContent }) {
+  const dragRef = useRef(null);
+  const isDragging = useRef(false);
+  const resizeRef = useRef(null);
+  const [editing, setEditing] = useState(false);
+  const [editVal, setEditVal] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      if (el.type === 'text' || el.type === 'title' || el.type === 'code') {
+        inputRef.current.select();
+      }
     }
-  } catch { /* ignore */ }
-  if (value && value.trim()) {
-    return [{ id: genId(), type: 'text', x: 48, y: 48, w: 440, h: 260, content: value, checked: [] }];
-  }
-  return [];
-}
+  }, [editing]);
 
-export function serializeCanvas(containers) {
-  return JSON.stringify({ type: 'canvas', containers });
-}
+  // ── Drag ────────────────────────────────────────────────────────────────────
+  const onPointerDown = useCallback((e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest('[data-resize]') || e.target.closest('[data-edit]')) return;
+    e.stopPropagation();
+    onSelect();
+    isDragging.current = true;
+    dragRef.current = { sx: e.clientX, sy: e.clientY, ex: el.x, ey: el.y };
 
-// ─── Container background / border styles ─────────────────────────────────────
-function containerBg(type) {
-  switch (type) {
-    case 'title':   return 'transparent';
-    case 'sticky':  return '#fffde0';
-    case 'code':    return '#1c2333';
-    case 'divider': return 'transparent';
-    default:        return 'rgba(255,254,252,.97)';
-  }
-}
+    const onMove = (ev) => {
+      if (!isDragging.current) return;
+      const dx = ev.clientX - dragRef.current.sx;
+      const dy = ev.clientY - dragRef.current.sy;
+      onDrag(el.id, dragRef.current.ex + dx, dragRef.current.ey + dy);
+    };
+    const onUp = () => {
+      isDragging.current = false;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, [el, onSelect, onDrag]);
 
-function containerBorder(type, selected) {
-  if (type === 'title' || type === 'divider') return 'none';
-  if (selected) return '1.5px solid var(--accent-orange)';
-  return '0.5px solid rgba(26,20,16,.09)';
-}
+  // ── Resize ──────────────────────────────────────────────────────────────────
+  const onResizeDown = useCallback((dir, e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    resizeRef.current = { dir, sx: e.clientX, sy: e.clientY, w: el.width, h: el.height, x: el.x, y: el.y };
 
-function containerShadow(type, selected) {
-  if (type === 'title' || type === 'divider') return 'none';
-  if (selected) return '0 0 0 3px rgba(240,107,28,.15), 0 12px 40px -12px rgba(46,30,12,.22), 0 2px 8px -2px rgba(46,30,12,.10)';
-  return '0 2px 16px -6px rgba(46,30,12,.14), 0 1px 4px rgba(46,30,12,.06)';
-}
+    const onMove = (ev) => {
+      const r = resizeRef.current;
+      if (!r) return;
+      const dx = ev.clientX - r.sx;
+      const dy = ev.clientY - r.sy;
+      let nw = r.w, nh = r.h, nx = r.x, ny = r.y;
+      if (dir.includes('e')) nw = Math.max(80, r.w + dx);
+      if (dir.includes('w')) { nw = Math.max(80, r.w - dx); nx = r.x + (r.w - nw); }
+      if (dir.includes('s')) nh = Math.max(30, r.h + dy);
+      if (dir.includes('n')) { nh = Math.max(30, r.h - dy); ny = r.y + (r.h - nh); }
+      onResize(el.id, nx, ny, nw, nh);
+    };
+    const onUp = () => {
+      resizeRef.current = null;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, [el, onResize]);
 
-// ─── ContainerBlock ───────────────────────────────────────────────────────────
-const ContainerBlock = memo(function ContainerBlock({
-  container, isSelected, readOnly,
-  onSelect, onDragStart, onResizeStart,
-  onContentChange, onCheckedChange, onDelete,
-}) {
-  const { id, type, x, y, w, h, content = '', checked = [] } = container;
-  const contentRef = useRef(null);
+  // ── Edit ────────────────────────────────────────────────────────────────────
+  const startEdit = useCallback(() => {
+    if (el.type === 'divider' || el.type === 'image') return;
+    setEditVal(el.content || '');
+    setEditing(true);
+  }, [el]);
 
-  // Set initial content imperatively — prevents React from clobbering cursor
-  useLayoutEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
-    if (type === 'code' || type === 'title' || type === 'sticky') {
-      el.textContent = content;
-    } else if (type === 'text') {
-      el.innerHTML = content;
-    }
-  }, [id]); // Only on mount / container ID change
+  const saveEdit = useCallback(() => {
+    setEditing(false);
+    onContent(el.id, editVal);
+  }, [el.id, editVal, onContent]);
 
-  const handleInput = (e) => onContentChange(
-    type === 'text' ? e.currentTarget.innerHTML : e.currentTarget.textContent
-  );
-
-  const typeInfo = CONTAINER_TYPES.find(t => t.type === type) || CONTAINER_TYPES[1];
-
-  // Drag handle: entire top bar for most types
-  const DragBar = () => (
-    <div
-      className="nc-drag-bar"
-      onPointerDown={(e) => { onSelect(); onDragStart(e); }}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
-        padding: type === 'title' ? '4px 0' : '5px 10px 5px 8px',
-        cursor: 'grab', userSelect: 'none',
-        background: type === 'code' ? 'rgba(255,255,255,.05)'
-          : type === 'title' ? 'transparent'
-          : type === 'sticky' ? 'rgba(0,0,0,.04)'
-          : 'rgba(26,20,16,.025)',
-        borderBottom: (type === 'title' || type === 'sticky' || type === 'divider')
-          ? 'none'
-          : '0.5px solid rgba(26,20,16,.06)',
-      }}
-    >
-      {type !== 'title' && type !== 'divider' && (
-        <svg width="8" height="12" viewBox="0 0 8 12" style={{ flexShrink: 0, opacity: .4 }}>
-          {[0, 4, 8].map(cy => (
-            <g key={cy}>
-              <circle cx="2" cy={cy + 2} r="1.2" fill={type === 'code' ? '#fff' : 'currentColor'} />
-              <circle cx="6" cy={cy + 2} r="1.2" fill={type === 'code' ? '#fff' : 'currentColor'} />
-            </g>
-          ))}
-        </svg>
-      )}
-      <span style={{
-        fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em',
-        color: type === 'code' ? 'rgba(255,255,255,.3)'
-          : type === 'sticky' ? 'rgba(100,80,0,.45)'
-          : 'var(--ink-4)',
-      }}>
-        {typeInfo.icon} {typeInfo.label}
-      </span>
-      {isSelected && !readOnly && (
-        <button
-          onPointerDown={e => e.stopPropagation()}
-          onClick={e => { e.stopPropagation(); onDelete(); }}
+  // ── Render inner content ────────────────────────────────────────────────────
+  const renderInner = () => {
+    if (editing) {
+      const Tag = el.type === 'title' ? 'input' : el.type === 'code' ? 'textarea' : 'textarea';
+      return (
+        <Tag
+          ref={inputRef}
+          value={editVal}
+          onChange={(e) => setEditVal(e.target.value)}
+          onBlur={saveEdit}
+          onKeyDown={(e) => { if (e.key === 'Escape') saveEdit(); if (e.key === 'Enter' && el.type !== 'code' && !e.shiftKey) saveEdit(); }}
+          data-edit="true"
           style={{
-            marginLeft: 'auto', background: 'rgba(231,64,46,.1)', border: 'none', borderRadius: 4,
-            cursor: 'pointer', padding: '1px 7px', fontSize: 10.5, color: 'var(--accent-coral)', lineHeight: '16px',
+            all: 'unset', width: '100%', height: '100', display: 'block',
+            fontSize: el.type === 'title' ? 28 : el.type === 'code' ? 13 : 14,
+            fontFamily: el.type === 'code' ? 'ui-monospace, monospace' : 'inherit',
+            color: 'var(--ink-1)', lineHeight: 1.5, resize: 'none',
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
           }}
-        >✕</button>
-      )}
-    </div>
-  );
+        />
+      );
+    }
 
-  // ── Resize handles ──────────────────────────────────────────────────────────
-  const ResizeHandles = () => (
-    <>
-      {['nw','n','ne','e','se','s','sw','w'].map(handle => {
-        const isCorner = handle.length === 2;
-        const pos = {
-          nw: { top: -4, left: -4 }, n: { top: -4, left: '50%', transform: 'translateX(-50%)' },
-          ne: { top: -4, right: -4 }, e: { top: '50%', right: -4, transform: 'translateY(-50%)' },
-          se: { bottom: -4, right: -4 }, s: { bottom: -4, left: '50%', transform: 'translateX(-50%)' },
-          sw: { bottom: -4, left: -4 }, w: { top: '50%', left: -4, transform: 'translateY(-50%)' },
-        }[handle];
-        const cursor = `${handle}-resize`;
+    switch (el.type) {
+      case 'title':
         return (
           <div
-            key={handle}
-            onPointerDown={e => { e.stopPropagation(); e.preventDefault(); onResizeStart(e, handle); }}
+            data-edit="true"
+            onDoubleClick={startEdit}
             style={{
-              position: 'absolute', ...pos, zIndex: 20,
-              width: isCorner ? 10 : 6, height: isCorner ? 10 : 6,
-              borderRadius: isCorner ? 3 : 2,
-              background: isCorner ? 'var(--accent-orange)' : 'rgba(240,107,28,.45)',
-              cursor, boxShadow: '0 1px 4px rgba(0,0,0,.15)',
+              fontSize: 28, fontWeight: 700, lineHeight: 1.2, color: 'var(--ink-1)',
+              letterSpacing: '-0.02em', cursor: 'text',
             }}
-          />
-        );
-      })}
-    </>
-  );
-
-  // ── Render ─────────────────────────────────────────────────────────────────
-  return (
-    <div
-      onPointerDown={e => { if (e.target === e.currentTarget) onSelect(); }}
-      style={{
-        position: 'absolute', left: x, top: y, width: w, height: h,
-        display: 'flex', flexDirection: 'column',
-        borderRadius: (type === 'title' || type === 'divider') ? 0 : 14,
-        background: containerBg(type),
-        border: containerBorder(type, isSelected),
-        boxShadow: containerShadow(type, isSelected),
-        overflow: 'hidden',
-        zIndex: isSelected ? 20 : 1,
-        transition: 'box-shadow 120ms ease, border-color 120ms ease',
-      }}
-    >
-      {/* Drag bar (shown for all types except divider which has its own) */}
-      {type !== 'divider' && <DragBar />}
-
-      {/* ── Content area ── */}
-      <div style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-
-        {/* TITLE */}
-        {type === 'title' && (
-          <div
-            ref={contentRef}
-            contentEditable={!readOnly}
-            suppressContentEditableWarning
-            data-ph="Untitled"
-            onInput={handleInput}
-            onPointerDown={e => { onSelect(); if (!isSelected) e.preventDefault(); }}
-            style={{
-              outline: 'none', flex: 1,
-              fontSize: Math.max(22, Math.min(40, w / 12)),
-              fontFamily: 'var(--font-display)', fontWeight: 700,
-              letterSpacing: '-0.025em', lineHeight: 1.15, color: 'var(--ink-1)',
-              wordBreak: 'break-word', padding: 0,
-            }}
-          />
-        )}
-
-        {/* TEXT */}
-        {type === 'text' && (
-          <div
-            ref={contentRef}
-            contentEditable={!readOnly}
-            suppressContentEditableWarning
-            data-ph="Start typing…"
-            onInput={handleInput}
-            onPointerDown={e => { onSelect(); }}
-            style={{
-              outline: 'none', flex: 1, overflow: 'auto',
-              fontSize: 14, lineHeight: 1.7, color: 'var(--ink-1)',
-              padding: '10px 14px', wordBreak: 'break-word',
-            }}
-          />
-        )}
-
-        {/* STICKY */}
-        {type === 'sticky' && (
-          <div
-            ref={contentRef}
-            contentEditable={!readOnly}
-            suppressContentEditableWarning
-            data-ph="Quick thought…"
-            onInput={handleInput}
-            onPointerDown={e => { onSelect(); }}
-            style={{
-              outline: 'none', flex: 1, overflow: 'auto',
-              fontSize: 13.5, lineHeight: 1.65, color: '#4a3800',
-              padding: '8px 12px', wordBreak: 'break-word',
-              fontFamily: 'var(--font-sans)',
-            }}
-          />
-        )}
-
-        {/* IMAGE */}
-        {type === 'image' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 10 }}>
-            {content ? (
-              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-                <img
-                  src={content}
-                  alt=""
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8, display: 'block' }}
-                  onError={e => { e.currentTarget.style.opacity = '0.25'; }}
-                />
-                {!readOnly && isSelected && (
-                  <button
-                    onClick={() => onContentChange('')}
-                    onPointerDown={e => e.stopPropagation()}
-                    style={{
-                      position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,.55)',
-                      border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer',
-                      padding: '2px 8px', fontSize: 10.5, fontWeight: 600,
-                    }}
-                  >Change</button>
-                )}
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center', width: '90%' }}>
-                <div style={{ fontSize: 28, marginBottom: 8, opacity: .4 }}>🖼</div>
-                <input
-                  placeholder="Paste image URL, press Enter"
-                  onKeyDown={e => { if (e.key === 'Enter') { onContentChange(e.currentTarget.value.trim()); } }}
-                  onPointerDown={e => e.stopPropagation()}
-                  style={{
-                    width: '100%', padding: '7px 10px', borderRadius: 8,
-                    border: '0.5px solid var(--ink-line)', outline: 'none',
-                    fontSize: 12, background: 'rgba(255,252,244,.9)', color: 'var(--ink-1)',
-                  }}
-                />
-              </div>
-            )}
+          >
+            {el.content || 'Untitled'}
           </div>
-        )}
+        );
 
-        {/* CODE */}
-        {type === 'code' && (
-          <pre
-            ref={contentRef}
-            contentEditable={!readOnly}
-            suppressContentEditableWarning
-            data-ph="// Enter code here…"
-            onInput={handleInput}
-            onPointerDown={e => { onSelect(); }}
+      case 'text':
+        return (
+          <div
+            data-edit="true"
+            onDoubleClick={startEdit}
             style={{
-              outline: 'none', flex: 1, overflow: 'auto', margin: 0,
-              padding: '10px 14px', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-              fontFamily: '"Fira Code","JetBrains Mono","Cascadia Code",monospace',
-              fontSize: 12.5, lineHeight: 1.7, color: '#8ecdef',
-              background: 'transparent',
+              fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word', cursor: 'text',
             }}
-          />
-        )}
+          >
+            {el.content || 'Double-click to edit'}
+          </div>
+        );
 
-        {/* TODO */}
-        {type === 'todo' && (
-          <div style={{ flex: 1, overflow: 'auto', padding: '8px 12px', display: 'flex', flexDirection: 'column' }}>
-            {(content ? content.split('\n').filter(l => l.trim()) : []).map((item, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 7 }}>
-                <input
-                  type="checkbox"
-                  checked={!!checked[idx]}
-                  onChange={() => {
-                    const next = [...checked];
-                    next[idx] = !next[idx];
-                    onCheckedChange(next);
-                  }}
-                  onPointerDown={e => e.stopPropagation()}
-                  style={{ marginTop: 3, flexShrink: 0, accentColor: 'var(--accent-orange)', cursor: 'pointer', width: 14, height: 14 }}
-                />
-                <span style={{
-                  fontSize: 13, lineHeight: 1.55, flex: 1, wordBreak: 'break-word',
-                  color: checked[idx] ? 'var(--ink-4)' : 'var(--ink-1)',
-                  textDecoration: checked[idx] ? 'line-through' : 'none',
-                }}>{item}</span>
+      case 'sticky':
+        return (
+          <div style={{
+            width: '100%', height: '100%', background: el.color || STICKY_COLORS[0],
+            borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column',
+          }}>
+            <div
+              data-edit="true"
+              onDoubleClick={startEdit}
+              style={{
+                fontSize: 13, lineHeight: 1.55, color: 'var(--ink-1)',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word', flex: 1, cursor: 'text',
+              }}
+            >
+              {el.content || 'Double-click to edit'}
+            </div>
+          </div>
+        );
+
+      case 'code':
+        return (
+          <div style={{
+            width: '100%', height: '100%', background: '#1e1e1e', borderRadius: 8,
+            padding: 14, display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{ fontSize: 10, color: '#888', marginBottom: 6, fontFamily: 'ui-monospace, monospace' }}>code</div>
+            <div
+              data-edit="true"
+              onDoubleClick={startEdit}
+              style={{
+                fontSize: 13, lineHeight: 1.5, color: '#e5e5e5',
+                fontFamily: 'ui-monospace, monospace', whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word', flex: 1, cursor: 'text',
+              }}
+            >
+              {el.content || '// double-click to edit'}
+            </div>
+          </div>
+        );
+
+      case 'todo': {
+        const items = el.content ? el.content.split('\n').filter(Boolean) : ['Task 1', 'Task 2'];
+        return (
+          <div style={{ width: '100%', height: '100%', padding: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>To-do</div>
+            {items.map((item, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 13, color: 'var(--ink-2)' }}>
+                <span style={{ width: 16, height: 16, borderRadius: 4, border: '1.5px solid var(--ink-line)', flexShrink: 0 }} />
+                <span>{item}</span>
               </div>
             ))}
-            {!readOnly && (
-              <input
-                placeholder="Add item, press Enter…"
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                    const lines = content ? content.split('\n').filter(l => l.trim()) : [];
-                    onContentChange([...lines, e.currentTarget.value.trim()].join('\n'));
-                    e.currentTarget.value = '';
-                  }
-                }}
-                onPointerDown={e => e.stopPropagation()}
-                style={{
-                  all: 'unset', display: 'block', width: '100%', fontSize: 12,
-                  color: 'var(--ink-3)', borderTop: '0.5px solid var(--ink-line)',
-                  paddingTop: 7, marginTop: 4,
-                }}
-              />
+          </div>
+        );
+      }
+
+      case 'divider':
+        return (
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}>
+            <div style={{ flex: 1, height: 1, background: 'var(--ink-line)' }} />
+          </div>
+        );
+
+      case 'image':
+        return (
+          <div style={{
+            width: '100%', height: '100%', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', background: 'rgba(26,20,16,.03)', borderRadius: 8,
+            cursor: 'pointer',
+          }}
+            data-edit="true"
+            onClick={() => {
+              const url = window.prompt('Paste image URL:');
+              if (url) onContent(el.id, url);
+            }}
+          >
+            {el.content ? (
+              <img src={el.content} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
+            ) : (
+              <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Click to add image</span>
             )}
           </div>
-        )}
+        );
 
-        {/* DIVIDER */}
-        {type === 'divider' && (
-          <div
-            onPointerDown={(e) => { onSelect(); onDragStart(e); }}
-            style={{ display: 'flex', alignItems: 'center', height: '100%', gap: 10, padding: '0 8px', cursor: 'grab' }}
-          >
-            <svg width="10" height="12" viewBox="0 0 8 12" style={{ opacity: .3, flexShrink: 0 }}>
-              {[0, 4, 8].map(cy => (
-                <g key={cy}>
-                  <circle cx="2" cy={cy + 2} r="1.2" fill="currentColor" />
-                  <circle cx="6" cy={cy + 2} r="1.2" fill="currentColor" />
-                </g>
-              ))}
-            </svg>
-            <hr style={{ flex: 1, border: 'none', borderTop: '1.5px solid var(--ink-line)', margin: 0 }} />
+      case 'quote':
+        return (
+          <div style={{
+            width: '100%', height: '100%', display: 'flex', alignItems: 'center',
+            paddingLeft: 16, borderLeft: '3px solid var(--accent-orange)',
+          }}>
+            <div
+              data-edit="true"
+              onDoubleClick={startEdit}
+              style={{
+                fontSize: 14, fontStyle: 'italic', lineHeight: 1.5, color: 'var(--ink-1)',
+                cursor: 'text',
+              }}
+            >
+              {el.content || '"Double-click to edit"' }
+            </div>
           </div>
-        )}
-      </div>
+        );
 
-      {/* Resize handles (only when selected) */}
-      {isSelected && !readOnly && <ResizeHandles />}
+      default:
+        return null;
+    }
+  };
+
+  // ── Main render ─────────────────────────────────────────────────────────────
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      style={{
+        position: 'absolute', left: el.x, top: el.y,
+        width: el.width, height: el.height,
+        zIndex: isSelected ? 10 : 1,
+        cursor: isDragging.current ? 'grabbing' : 'grab',
+        transition: isDragging.current || resizeRef.current ? 'none' : 'box-shadow 140ms ease',
+        boxShadow: isSelected
+          ? '0 4px 16px rgba(0,0,0,.1), 0 0 0 2px var(--accent-orange)'
+          : '0 1px 4px rgba(0,0,0,.06)',
+        borderRadius: el.type === 'sticky' ? 6 : el.type === 'code' ? 8 : el.type === 'divider' ? 0 : 4,
+        background: el.type === 'text' ? 'rgba(255,255,255,.7)' : el.type === 'title' ? 'transparent' : 'transparent',
+        backdropFilter: el.type === 'text' ? 'blur(4px)' : 'none',
+        border: el.type === 'code' ? 'none' : el.type === 'divider' ? 'none' : '0.5px solid var(--ink-line)',
+        overflow: 'hidden', userSelect: 'none',
+      }}
+    >
+      {renderInner()}
+
+      {/* Resize handles */}
+      {isSelected && (
+        <>
+          {['se', 'sw', 'ne', 'nw'].map(dir => (
+            <div
+              key={dir}
+              data-resize="true"
+              onPointerDown={(e) => onResizeDown(dir, e)}
+              style={{
+                position: 'absolute',
+                [dir.includes('n') ? 'top' : 'bottom']: -5,
+                [dir.includes('w') ? 'left' : 'right']: -5,
+                width: 10, height: 10,
+                background: '#fff', border: '2px solid var(--accent-orange)',
+                borderRadius: 2, cursor: `${dir}-resize`, zIndex: 20,
+              }}
+            />
+          ))}
+        </>
+      )}
     </div>
   );
-}, (prev, next) =>
-  prev.container === next.container &&
-  prev.isSelected === next.isSelected &&
-  prev.readOnly === next.readOnly
-);
+}
 
-// Placeholder CSS
-const CANVAS_CSS = `
-  @keyframes ncContainerIn { from { opacity: 0; transform: scale(.94) translateY(8px); } to { opacity: 1; transform: none; } }
-  .nc-container-new { animation: ncContainerIn 200ms var(--ease-glass,cubic-bezier(.22,1,.36,1)) backwards; }
-  .nc-drag-bar:active { cursor: grabbing !important; }
-  [data-ph]:empty::before { content: attr(data-ph); color: rgba(26,20,16,.22); pointer-events: none; }
-  .nc-root [contenteditable]:focus { outline: none; }
-  @media (max-width: 768px) { .nc-type-toolbar span.nc-label { display: none; } }
-`;
-
-// ─── NoteCanvas ───────────────────────────────────────────────────────────────
+// ─── Main NoteCanvas ─────────────────────────────────────────────────────────────
 export function NoteCanvas({ value = '', onChange, readOnly = false }) {
-  const [containers, setContainers] = useState(() => parseCanvas(value));
+  const [elements, setElements] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
-  const [newIds, setNewIds] = useState(new Set());
-  const serializedRef = useRef(value);
-  const canvasRef = useRef(null);
+  const [activeTool, setActiveTool] = useState(null);
+  const boardRef = useRef(null);
 
-  // Sync incoming value → containers (note switches / voice update)
+  // ── Parse saved value ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (value !== serializedRef.current) {
-      setContainers(parseCanvas(value));
-      serializedRef.current = value;
-    }
-  }, [value]);
+    try {
+      if (value && typeof value === 'string') {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setElements(parsed);
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
 
-  const serialize = useCallback((next) => {
-    const s = serializeCanvas(next);
-    if (s !== serializedRef.current) {
-      serializedRef.current = s;
-      onChange?.(s);
-    }
+  // ── Persist changes ─────────────────────────────────────────────────────────
+  const sync = useCallback((els) => {
+    setElements(els);
+    onChange?.(JSON.stringify(els));
   }, [onChange]);
 
-  // ── Add container ──────────────────────────────────────────────────────────
-  const addContainer = useCallback((type) => {
-    const cfg = CONTAINER_TYPES.find(t => t.type === type) || CONTAINER_TYPES[1];
-    const canvas = canvasRef.current;
-    const scrollLeft = canvas?.scrollLeft || 0;
-    const scrollTop = canvas?.scrollTop || 0;
-    const cw = canvas?.clientWidth || 800;
-    const offset = (containers.length % 6) * 24;
-    const newC = {
-      id: genId(), type,
-      x: Math.round(scrollLeft + (cw - cfg.defaultW) / 2 + offset),
-      y: Math.round(scrollTop + 80 + offset),
-      w: cfg.defaultW, h: cfg.defaultH,
-      content: '', checked: [],
+  // ── Add element from toolbar ────────────────────────────────────────────────
+  const addElement = useCallback((typeDef) => {
+    const rect = boardRef.current?.getBoundingClientRect();
+    const cx = rect ? rect.width / 2 - typeDef.defaultW / 2 : 100;
+    const cy = rect ? rect.height / 2 - typeDef.defaultH / 2 : 100;
+
+    const el = {
+      id: genId(),
+      type: typeDef.type,
+      x: cx + (Math.random() - 0.5) * 40,
+      y: cy + (Math.random() - 0.5) * 40,
+      width: typeDef.defaultW,
+      height: typeDef.defaultH,
+      content: typeDef.defaultContent,
+      color: typeDef.type === 'sticky' ? STICKY_COLORS[Math.floor(Math.random() * STICKY_COLORS.length)] : undefined,
     };
-    const next = [...containers, newC];
-    setContainers(next);
-    setSelectedId(newC.id);
-    setNewIds(s => new Set([...s, newC.id]));
-    serialize(next);
-    setTimeout(() => setNewIds(s => { const n = new Set(s); n.delete(newC.id); return n; }), 400);
-  }, [containers, serialize]);
+    const next = [...elements, el];
+    sync(next);
+    setSelectedId(el.id);
+    setActiveTool(null);
+  }, [elements, sync]);
 
-  // ── Drag ───────────────────────────────────────────────────────────────────
-  const startDrag = useCallback((e, id) => {
-    if (readOnly) return;
-    e.preventDefault();
-    const c = containers.find(c => c.id === id);
-    if (!c) return;
-    const startX = e.clientX, startY = e.clientY;
-    const origX = c.x, origY = c.y;
+  // ── Drag handler ────────────────────────────────────────────────────────────
+  const handleDrag = useCallback((id, x, y) => {
+    setElements(prev => prev.map(e => e.id === id ? { ...e, x, y } : e));
+  }, []);
 
-    const onMove = (me) => {
-      const dx = me.clientX - startX;
-      const dy = me.clientY - startY;
-      setContainers(prev => prev.map(p => p.id === id ? { ...p, x: Math.max(0, origX + dx), y: Math.max(0, origY + dy) } : p));
-    };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      setContainers(prev => { serialize(prev); return prev; });
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  }, [containers, readOnly, serialize]);
+  // ── Resize handler ──────────────────────────────────────────────────────────
+  const handleResize = useCallback((id, x, y, w, h) => {
+    setElements(prev => prev.map(e => e.id === id ? { ...e, x, y, width: w, height: h } : e));
+  }, []);
 
-  // ── Resize ─────────────────────────────────────────────────────────────────
-  const startResize = useCallback((e, id, handle) => {
-    if (readOnly) return;
-    e.preventDefault();
-    const c = containers.find(c => c.id === id);
-    if (!c) return;
-    const startX = e.clientX, startY = e.clientY;
-    const origW = c.w, origH = c.h, origX = c.x, origY = c.y;
+  // ── Content change ──────────────────────────────────────────────────────────
+  const handleContent = useCallback((id, content) => {
+    setElements(prev => prev.map(e => e.id === id ? { ...e, content } : e));
+    // Persist immediately
+    setTimeout(() => {
+      setElements(current => {
+        onChange?.(JSON.stringify(current));
+        return current;
+      });
+    }, 0);
+  }, [onChange]);
 
-    const onMove = (me) => {
-      const dx = me.clientX - startX;
-      const dy = me.clientY - startY;
-      setContainers(prev => prev.map(p => {
-        if (p.id !== id) return p;
-        let w = origW, h = origH, x = origX, y = origY;
-        if (handle.includes('e')) w = Math.max(120, origW + dx);
-        if (handle.includes('s')) h = Math.max(56, origH + dy);
-        if (handle.includes('w')) { w = Math.max(120, origW - dx); x = origX + (origW - w); }
-        if (handle.includes('n')) { h = Math.max(56, origH - dy); y = origY + (origH - h); }
-        return { ...p, w, h, x: Math.max(0, x), y: Math.max(0, y) };
-      }));
-    };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      setContainers(prev => { serialize(prev); return prev; });
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  }, [containers, readOnly, serialize]);
-
-  // ── Content / checked updates ──────────────────────────────────────────────
-  const updateContent = useCallback((id, content) => {
-    setContainers(prev => {
-      const next = prev.map(c => c.id === id ? { ...c, content } : c);
-      serialize(next);
-      return next;
-    });
-  }, [serialize]);
-
-  const updateChecked = useCallback((id, checked) => {
-    setContainers(prev => {
-      const next = prev.map(c => c.id === id ? { ...c, checked } : c);
-      serialize(next);
-      return next;
-    });
-  }, [serialize]);
-
-  const deleteContainer = useCallback((id) => {
-    const next = containers.filter(c => c.id !== id);
-    setSelectedId(null);
-    setContainers(next);
-    serialize(next);
-  }, [containers, serialize]);
-
-  // keyboard delete
+  // ── Delete selected ─────────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e) => {
-      if (!selectedId || readOnly) return;
-      if ((e.key === 'Delete' || e.key === 'Backspace') && document.activeElement?.contentEditable !== 'true' && document.activeElement?.tagName !== 'INPUT') {
-        deleteContainer(selectedId);
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+        setElements(prev => prev.filter(el => el.id !== selectedId));
+        setSelectedId(null);
       }
-      if (e.key === 'Escape') setSelectedId(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedId, readOnly, deleteContainer]);
+  }, [selectedId]);
 
-  // Canvas size (scrollable area)
-  const canvasW = Math.max(1200, ...containers.map(c => c.x + c.w + 80));
-  const canvasH = Math.max(800, ...containers.map(c => c.y + c.h + 80));
+  // ── Click board to deselect ─────────────────────────────────────────────────
+  const handleBoardClick = useCallback((e) => {
+    if (e.target === boardRef.current || e.target.closest('[data-board]')) {
+      setSelectedId(null);
+    }
+  }, []);
 
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }} className="nc-root">
-      <style>{CANVAS_CSS}</style>
+    <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: '#faf9f6' }}>
 
-      {/* ── Type toolbar ──────────────────────────────────────────────────── */}
-      {!readOnly && (
-        <div className="nc-type-toolbar" style={{
-          display: 'flex', alignItems: 'center', gap: 3, padding: '6px 12px',
-          borderBottom: '0.5px solid var(--ink-line)', flexShrink: 0,
-          background: 'rgba(255,252,244,.96)', backdropFilter: 'blur(12px)',
-          flexWrap: 'wrap',
-        }}>
-          <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--ink-4)', marginRight: 2 }}>Insert</span>
+      {/* Toolbar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 4, padding: '8px 12px',
+        borderBottom: '0.5px solid var(--ink-line)', background: 'rgba(255,252,244,.96)',
+        backdropFilter: 'blur(16px)', flexShrink: 0, flexWrap: 'wrap',
+      }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginRight: 4 }}>
+          Add:
+        </span>
+        {CONTAINER_TYPES.map(t => (
+          <button
+            key={t.type}
+            onClick={() => addElement(t)}
+            title={t.label}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+              border: 'none', cursor: readOnly ? 'default' : 'pointer',
+              background: 'rgba(26,20,16,.04)', color: 'var(--ink-2)',
+              transition: 'all 120ms ease',
+              opacity: readOnly ? 0.4 : 1,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(245,165,36,.12)'; e.currentTarget.style.color = 'var(--accent-orange)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(26,20,16,.04)'; e.currentTarget.style.color = 'var(--ink-2)'; }}
+          >
+            <span style={{ fontSize: 13, lineHeight: 1 }}>{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
 
-          {CONTAINER_TYPES.map(({ type, icon, label }) => (
+        {selectedId && (
+          <>
+            <div style={{ width: 1, height: 16, background: 'var(--ink-line)', margin: '0 6px' }} />
             <button
-              key={type}
-              onClick={() => addContainer(type)}
-              title={`Add ${label}`}
+              onClick={() => { setElements(prev => prev.filter(e => e.id !== selectedId)); setSelectedId(null); }}
               style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '4px 9px', borderRadius: 7, fontSize: 11, fontWeight: 600,
-                background: 'rgba(26,20,16,.04)', border: '0.5px solid transparent',
-                cursor: 'pointer', color: 'var(--ink-2)',
-                transition: 'all 120ms ease',
+                padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                border: 'none', cursor: 'pointer', background: 'rgba(231,64,46,.08)', color: 'var(--accent-coral)',
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(245,165,36,.14)'; e.currentTarget.style.borderColor = 'rgba(245,165,36,.3)'; e.currentTarget.style.color = 'var(--accent-orange)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(26,20,16,.04)'; e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.color = 'var(--ink-2)'; }}
             >
-              <span style={{ fontSize: 13 }}>{icon}</span>
-              <span className="nc-label">{label}</span>
+              Delete
             </button>
-          ))}
+          </>
+        )}
 
-          {selectedId && (
-            <>
-              <div style={{ width: 1, height: 16, background: 'var(--ink-line)', margin: '0 3px' }} />
-              <button
-                onClick={() => deleteContainer(selectedId)}
-                style={{
-                  padding: '4px 9px', borderRadius: 7, fontSize: 11, fontWeight: 600,
-                  background: 'rgba(231,64,46,.08)', border: 'none', cursor: 'pointer', color: 'var(--accent-coral)',
-                }}
-              >✕ Delete</button>
-            </>
-          )}
-
-          <span style={{ marginLeft: 'auto', fontSize: 9.5, color: 'var(--ink-4)' }}>
-            Drag grip to move · corner dot to resize · Del to remove
-          </span>
+        <div style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--ink-4)' }}>
+          {elements.length} block{elements.length !== 1 ? 's' : ''} · drag to move · double-click to edit · select + Delete to remove
         </div>
-      )}
+      </div>
 
-      {/* ── Canvas area ─────────────────────────────────────────────────────── */}
+      {/* Canvas board */}
       <div
-        ref={canvasRef}
-        onClick={e => { if (e.target === canvasRef.current) setSelectedId(null); }}
+        ref={boardRef}
+        data-board="true"
+        onClick={handleBoardClick}
         style={{
-          flex: 1, overflow: 'auto', position: 'relative',
-          backgroundImage: 'radial-gradient(circle, rgba(26,20,16,.07) 1px, transparent 1px)',
-          backgroundSize: '26px 26px',
-          backgroundColor: '#f4f1ea',
-          WebkitOverflowScrolling: 'touch',
+          flex: 1, position: 'relative', overflow: 'auto',
+          backgroundImage: 'radial-gradient(circle, rgba(0,0,0,.06) 1px, transparent 1px)',
+          backgroundSize: '24px 24px',
         }}
       >
-        {/* Inner scrollable canvas */}
-        <div
-          style={{ position: 'relative', width: canvasW, height: canvasH }}
-          onClick={e => { if (e.target === e.currentTarget) setSelectedId(null); }}
-        >
-          {containers.length === 0 && (
-            <div style={{
-              position: 'absolute', top: '50%', left: '50%',
-              transform: 'translate(-50%, -60%)',
-              textAlign: 'center', color: 'var(--ink-4)', pointerEvents: 'none',
-            }}>
-              <div style={{ fontSize: 36, marginBottom: 12, opacity: .5 }}>✦</div>
-              <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 6 }}>Empty board</div>
-              <div style={{ fontSize: 12 }}>Click a container type above to start</div>
-            </div>
-          )}
+        {elements.length === 0 && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', color: 'var(--ink-3)', gap: 8,
+          }}>
+            <span style={{ fontSize: 32, opacity: 0.3 }}>+</span>
+            <span style={{ fontSize: 13 }}>Click a tool above to add a block</span>
+          </div>
+        )}
 
-          {containers.map(c => (
-            <ContainerBlock
-              key={c.id}
-              container={c}
-              isSelected={selectedId === c.id}
-              readOnly={readOnly}
-              onSelect={() => setSelectedId(c.id)}
-              onDragStart={(e) => startDrag(e, c.id)}
-              onResizeStart={(e, handle) => startResize(e, c.id, handle)}
-              onContentChange={(content) => updateContent(c.id, content)}
-              onCheckedChange={(checked) => updateChecked(c.id, checked)}
-              onDelete={() => deleteContainer(c.id)}
-            />
-          ))}
-        </div>
+        {elements.map(el => (
+          <ContainerBlock
+            key={el.id}
+            el={el}
+            isSelected={el.id === selectedId}
+            onSelect={() => setSelectedId(el.id)}
+            onDrag={handleDrag}
+            onResize={handleResize}
+            onContent={handleContent}
+          />
+        ))}
       </div>
     </div>
   );
