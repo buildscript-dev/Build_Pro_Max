@@ -3,7 +3,10 @@
     "allow": [
       "Bash(unzip *)",
       "Bash(npm run *)",
-      "Bash(xargs cat)"
+      "Bash(xargs cat)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   }
 }
