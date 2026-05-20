@@ -14,12 +14,12 @@ function MiniBlock({ el, isSelected, onSelect, onDrag, onResize, onContent, isCo
   const onPointerDown = useCallback((e) => {
     if (e.button !== 0) return;
     e.stopPropagation();
-    
+
     if (isConnecting) {
       startConnection(el.id);
       return;
     }
-    
+
     if (editing) return;
     onSelect();
     isDragging.current = true;
@@ -113,7 +113,7 @@ function MiniBlock({ el, isSelected, onSelect, onDrag, onResize, onContent, isCo
           {el.content || <span style={{ color: 'var(--ink-4)' }}>Double-click to type</span>}
         </div>
       )}
-      
+
       {isConnecting && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(245,165,36,0.1)', borderRadius: 8, pointerEvents: 'none' }} />
       )}
@@ -141,17 +141,17 @@ function MiniBlock({ el, isSelected, onSelect, onDrag, onResize, onContent, isCo
 }
 
 // Arrow overlay renderer
-function ArrowLayer({ blocks, connections, drawingConn, boardRef, onDeleteConnection }) {
+function ArrowLayer({ blocks, connections, drawingConn, boardRef, onDeleteConnection, onDragConnection }) {
   // Get edge points for a connection
   const getEdgePoints = (b1, b2) => {
     if (!b1 || !b2) return null;
-    const c1 = { x: b1.x + b1.width/2, y: b1.y + b1.height/2 };
-    const c2 = { x: b2.x + (b2.width || 0)/2, y: b2.y + (b2.height || 0)/2 };
-    
+    const c1 = { x: b1.x + b1.width / 2, y: b1.y + b1.height / 2 };
+    const c2 = { x: b2.x + (b2.width || 0) / 2, y: b2.y + (b2.height || 0) / 2 };
+
     const dx = c2.x - c1.x;
     const dy = c2.y - c1.y;
     const isHorizontal = Math.abs(dx) > Math.abs(dy);
-    
+
     let p1, p2;
     if (isHorizontal) {
       if (dx > 0) { p1 = { x: b1.x + b1.width + 4, y: c1.y }; p2 = { x: b2.x - 4, y: c2.y }; }
@@ -160,10 +160,10 @@ function ArrowLayer({ blocks, connections, drawingConn, boardRef, onDeleteConnec
       if (dy > 0) { p1 = { x: c1.x, y: b1.y + b1.height + 4 }; p2 = { x: c2.x, y: b2.y - 4 }; }
       else { p1 = { x: c1.x, y: b1.y - 4 }; p2 = { x: c2.x, y: b2.y + (b2.height || 0) + 4 }; }
     }
-    
+
     // For drawing lines to the mouse, b2 width/height is 0, so p2 is just the mouse pos
     if (!b2.id) p2 = c2;
-    
+
     return { p1, p2, isHorizontal };
   };
 
@@ -171,10 +171,10 @@ function ArrowLayer({ blocks, connections, drawingConn, boardRef, onDeleteConnec
     if (!p1 || !p2) return '';
     if (isHoriz) {
       const dx = Math.max(Math.abs(p2.x - p1.x) * 0.5, 40);
-      return `M ${p1.x} ${p1.y} C ${p1.x + (p2.x>p1.x?dx:-dx)} ${p1.y}, ${p2.x - (p2.x>p1.x?dx:-dx)} ${p2.y}, ${p2.x} ${p2.y}`;
+      return `M ${p1.x} ${p1.y} C ${p1.x + (p2.x > p1.x ? dx : -dx)} ${p1.y}, ${p2.x - (p2.x > p1.x ? dx : -dx)} ${p2.y}, ${p2.x} ${p2.y}`;
     } else {
       const dy = Math.max(Math.abs(p2.y - p1.y) * 0.5, 40);
-      return `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y + (p2.y>p1.y?dy:-dy)}, ${p2.x} ${p2.y - (p2.y>p1.y?dy:-dy)}, ${p2.x} ${p2.y}`;
+      return `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y + (p2.y > p1.y ? dy : -dy)}, ${p2.x} ${p2.y - (p2.y > p1.y ? dy : -dy)}, ${p2.x} ${p2.y}`;
     }
   };
 
@@ -199,13 +199,13 @@ function ArrowLayer({ blocks, connections, drawingConn, boardRef, onDeleteConnec
         return (
           <g key={c.id} style={{ pointerEvents: 'auto' }}>
             <path d={drawCurve(pts.p1, pts.p2, pts.isHorizontal)} fill="none" stroke="rgba(26,20,16,.2)" strokeWidth="3" markerEnd="url(#arrowhead)" />
-            <path d={drawCurve(pts.p1, pts.p2, pts.isHorizontal)} fill="none" stroke="transparent" strokeWidth="15" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); onDeleteConnection(c.id); }} />
-            <circle cx={midX} cy={midY} r="9" fill="#fff" stroke="var(--ink-line)" strokeWidth="1" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); onDeleteConnection(c.id); }} />
+            <path d={drawCurve(pts.p1, pts.p2, pts.isHorizontal)} fill="none" stroke="transparent" strokeWidth="15" style={{ cursor: 'grab' }} onMouseDown={(e) => { e.stopPropagation(); onDragConnection(c.id, e); }} />
+            <circle cx={midX} cy={midY} r="9" fill="#fff" stroke="var(--ink-line)" strokeWidth="1" style={{ cursor: 'grab' }} onMouseDown={(e) => { e.stopPropagation(); onDragConnection(c.id, e); }} />
             <text x={midX} y={midY} textAnchor="middle" dy="4" fontSize="13" fontWeight="bold" fill="var(--ink-3)" style={{ pointerEvents: 'none', userSelect: 'none' }}>×</text>
           </g>
         );
       })}
-      
+
       {drawingConn && (() => {
         const fromB = blocks.find(x => x.id === drawingConn.from);
         const toB = { x: drawingConn.mouseX, y: drawingConn.mouseY, width: 0, height: 0 };
@@ -260,6 +260,28 @@ export function EmbeddedCanvas({ data, onChange }) {
     const nc = connections.filter(c => c.id !== connId);
     setConnections(nc);
     persist(blocks, nc);
+  }, [connections, blocks, persist]);
+
+  const handleDragConnection = useCallback((id, e) => {
+    const c = connections.find(x => x.id === id);
+    if (!c) return;
+    
+    // Delete the connection
+    const nc = connections.filter(x => x.id !== id);
+    setConnections(nc);
+    persist(blocks, nc);
+
+    // Enter drawing mode from the source block
+    if (boardRef.current) {
+      const rect = boardRef.current.getBoundingClientRect();
+      setDrawingConn({
+        from: c.from,
+        mouseX: e.clientX - rect.left,
+        mouseY: e.clientY - rect.top,
+        startedAt: Date.now()
+      });
+      setIsConnecting(true);
+    }
   }, [connections, blocks, persist]);
 
   const addBlock = () => {
@@ -349,8 +371,8 @@ export function EmbeddedCanvas({ data, onChange }) {
         onClick={() => { setSelectedId(null); if (drawingConn) { setDrawingConn(null); setIsConnecting(false); } }}
         style={{ width: '100%', height: '100%', minHeight: 400, position: 'relative', cursor: isConnecting ? 'crosshair' : 'default' }}
       >
-        <ArrowLayer blocks={blocks} connections={connections} drawingConn={drawingConn} boardRef={boardRef} onDeleteConnection={deleteConnection} />
-        
+        <ArrowLayer blocks={blocks} connections={connections} drawingConn={drawingConn} boardRef={boardRef} onDeleteConnection={deleteConnection} onDragConnection={handleDragConnection} />
+
         {blocks.map(el => (
           <MiniBlock
             key={el.id}
