@@ -1,19 +1,40 @@
 import React from 'react';
 
-export const ScreenShell = ({ title, eyebrow, subtitle, right, children, padTop = 86, padBottom = 110 }) => (
-  <div className="scroll" style={{
-    position: "absolute", inset: 0, paddingTop: padTop, paddingBottom: padBottom,
-    paddingLeft: 36, paddingRight: 36, overflowY: "auto",
+export const ScreenShell = ({ title, eyebrow, subtitle, right, children, padTop, padBottom }) => (
+  <div className="screen-shell scroll" style={{
+    position: "absolute", inset: 0,
+    paddingTop: padTop ?? 'var(--pad-block)',
+    paddingBottom: padBottom ?? 'calc(var(--dock-height) + 48px)',
+    paddingLeft: 'var(--pad-inline)',
+    paddingRight: 'var(--pad-inline)',
+    overflowY: "auto",
   }}>
-    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 28, paddingLeft: 6, paddingRight: 6 }}>
-      <div>
-        {eyebrow && <div className="t-cap" style={{ marginBottom: 8, color: "var(--accent-orange)" }}>{eyebrow}</div>}
-        <h1 className="t-display" style={{ margin: 0, fontSize: 52, fontWeight: 400, letterSpacing: "-0.025em", lineHeight: 1.02 }}>
+    <div className="screen-shell-header" style={{
+      display: "flex", alignItems: "flex-end", justifyContent: "space-between",
+      marginBottom: 'calc(var(--gap-grid) + 8px)',
+      paddingLeft: 4, paddingRight: 4,
+      flexWrap: "wrap", gap: 12,
+    }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        {eyebrow && <div className="t-cap" style={{ marginBottom: 6, color: "var(--accent-orange)" }}>{eyebrow}</div>}
+        <h1 className="t-display screen-shell-title" style={{
+          margin: 0, fontWeight: 400, letterSpacing: "-0.025em", lineHeight: 1.02,
+          fontSize: 'clamp(28px, 5.2vw, 52px)',
+        }}>
           {title}
         </h1>
-        {subtitle && <div style={{ marginTop: 10, fontSize: 14, color: "var(--ink-2)", maxWidth: 720 }}>{subtitle}</div>}
+        {subtitle && (
+          <div className="screen-shell-subtitle" style={{
+            marginTop: 8, fontSize: 'clamp(12px, 1.4vw, 14px)',
+            color: "var(--ink-2)", maxWidth: 640,
+          }}>
+            {subtitle}
+          </div>
+        )}
       </div>
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>{right}</div>
+      <div className="resp-scroll-x" style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+        {right}
+      </div>
     </div>
     {children}
   </div>

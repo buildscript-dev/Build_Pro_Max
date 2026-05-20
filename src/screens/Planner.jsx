@@ -7,7 +7,7 @@ import { formatDate, getCurrentTime } from '../services/clock';
 import { ScreenGuide } from '../components/ui/ScreenGuide';
 
 const ScreenShell = ({ title, eyebrow, subtitle, right, children, padTop = 86, padBottom = 110 }) => (
-  <div className="scroll" style={{
+  <div className="screen-shell scroll" style={{
     position: "absolute", inset: 0, paddingTop: padTop, paddingBottom: padBottom,
     paddingLeft: 36, paddingRight: 36, overflowY: "auto",
   }}>
@@ -240,9 +240,9 @@ const WeekView = ({ days, tracks, onUpdateTracks, showMe, doIt, todayIndex }) =>
   const dismiss = () => { setEditingBlock(null); setAddingBlock(null); };
 
   return (
-    <GlassCard padding={0} style={{ overflow: "hidden" }}>
+    <GlassCard padding={0} className="planner-week" style={{ overflow: "hidden" }}>
       {/* Column headers */}
-      <div style={{ display: "grid", gridTemplateColumns: "160px repeat(7, 1fr)", borderBottom: "0.5px solid var(--ink-line)" }}>
+      <div className="planner-week-grid" style={{ display: "grid", gridTemplateColumns: "160px repeat(7, 1fr)", borderBottom: "0.5px solid var(--ink-line)" }}>
         <div style={{ padding: "14px 18px", fontSize: 11, fontWeight: 600, color: "var(--ink-3)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Track</div>
         {days.map((d, i) => (
           <div key={i} style={{
@@ -261,7 +261,7 @@ const WeekView = ({ days, tracks, onUpdateTracks, showMe, doIt, todayIndex }) =>
       {tracks.map((t, ti) => {
         const c = accentColor[t.color];
         return (
-          <div key={ti} style={{ display: "grid", gridTemplateColumns: "160px repeat(7, 1fr)", borderBottom: "0.5px solid var(--ink-line)", minHeight: 68, position: "relative" }}>
+          <div key={ti} className="planner-week-grid" style={{ display: "grid", gridTemplateColumns: "160px repeat(7, 1fr)", borderBottom: "0.5px solid var(--ink-line)", minHeight: 68, position: "relative" }}>
             {/* Track label */}
             <div style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ width: 8, height: 8, borderRadius: 999, background: c, flexShrink: 0, boxShadow: `0 0 6px ${c}88` }}/>

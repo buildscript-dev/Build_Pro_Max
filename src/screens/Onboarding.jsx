@@ -41,7 +41,7 @@ export const Onboarding = ({ onComplete }) => {
   };
 
   return (
-    <div style={{ position: "absolute", inset: 0, paddingTop: 90, paddingBottom: 110, paddingLeft: 36, paddingRight: 36, overflowY: "auto" }} className="scroll">
+    <div style={{ position: "absolute", inset: 0, paddingTop: 90, paddingBottom: 110, paddingLeft: 36, paddingRight: 36, overflowY: "auto" }} className="onboarding-screen scroll">
       <div style={{ maxWidth: 920, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
           {steps.map((s, i) => (

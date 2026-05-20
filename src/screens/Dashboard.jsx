@@ -124,32 +124,40 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
 
   return (
     <div ref={containerRef} className="scroll" style={{
-      position: "absolute", inset: 0, paddingTop: 86, paddingBottom: 100,
-      paddingLeft: 36, paddingRight: 36, overflowY: "auto"
+      position: "absolute", inset: 0,
+      paddingTop: 'var(--pad-block)',
+      paddingBottom: 'calc(var(--dock-height) + 40px)',
+      paddingLeft: 'var(--pad-inline)',
+      paddingRight: 'var(--pad-inline)',
+      overflowY: "auto"
     }}>
       <div style={{
         display: "flex", alignItems: "flex-end", justifyContent: "space-between",
-        marginBottom: 24, gap: 24, paddingLeft: 6, paddingRight: 6
+        marginBottom: 'var(--gap-grid)', gap: 'var(--gap-grid)',
+        paddingLeft: 4, paddingRight: 4,
+        flexWrap: "wrap",
       }}>
         <div>
-          <div className="t-cap" style={{ marginBottom: 8 }}>
+          <div className="t-cap" style={{ marginBottom: 6 }}>
             <span style={{ color: "var(--accent-orange)" }}>●</span>  {D.today.weekOf}
           </div>
           <h1 className="t-display" style={{
-            margin: 0, fontSize: 56, fontWeight: 400, color: "var(--ink-1)",
+            margin: 0,
+            fontSize: 'clamp(28px, 5.6vw, 56px)',
+            fontWeight: 400, color: "var(--ink-1)",
             letterSpacing: "-0.025em", lineHeight: 1.02
           }}>
             {greeting}, <span className="t-display-italic" style={{ color: "var(--accent-orange)" }}>Build</span>.
-            {focusActive && <span style={{ fontSize: 18, marginLeft: 16, color: "var(--accent-coral)" }}>Focus · {formatTimer(focusRemaining)}</span>}
+            {focusActive && <span style={{ fontSize: 'clamp(13px, 1.8vw, 18px)', marginLeft: 'clamp(8px, 1.6vw, 16px)', color: "var(--accent-coral)" }}>Focus · {formatTimer(focusRemaining)}</span>}
           </h1>
-          <div style={{ marginTop: 10, fontSize: 14, color: "var(--ink-2)", maxWidth: 720 }}>
+          <div style={{ marginTop: 8, fontSize: 'clamp(12px, 1.4vw, 14px)', color: "var(--ink-2)", maxWidth: 640 }}>
             <span className="ai-text" style={{ fontWeight: 500 }}>AI today: </span>
             {D.aiSuggestions?.[0]?.text || `Today's big rock is the ${D.today.bigRock?.toLowerCase() || 'main task'} — everything else can wait.`}
           </div>
         </div>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <div className="t-mono" style={{ fontSize: 13, color: "var(--ink-3)", padding: "0 8px" }}>
+        <div className="resp-scroll-x" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div className="t-mono" style={{ fontSize: 'clamp(11px, 1.3vw, 13px)', color: "var(--ink-3)", padding: "0 6px" }}>
             {liveTime}
           </div>
           {focusActive ? (
@@ -171,8 +179,8 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
       <div style={{
         display: "grid",
         gridTemplateColumns: "repeat(4, 1fr)",
-        gridAutoRows: "minmax(180px, auto)",
-        gap: 16,
+        gridAutoRows: "minmax(160px, auto)",
+        gap: 'var(--gap-grid)',
         filter: expandedId ? "blur(6px) saturate(.9) brightness(1.03)" : "none",
         transform: expandedId ? "scale(0.985)" : "scale(1)",
         transformOrigin: "center center",
