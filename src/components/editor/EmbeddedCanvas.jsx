@@ -3,7 +3,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 function genId() { return Math.random().toString(36).slice(2, 9); }
 
 // Renders a single draggable block in the embedded canvas
-function MiniBlock({ el, isSelected, onSelect, onDrag, onResize, onContent, isConnecting, startConnection, completeConnection, drawingConn }) {
+const MiniBlock = React.memo(function MiniBlock({ el, isSelected, onSelect, onDrag, onResize, onContent, isConnecting, startConnection, completeConnection, drawingConn }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(el.content || '');
   const dragRef = useRef(null);
@@ -138,10 +138,10 @@ function MiniBlock({ el, isSelected, onSelect, onDrag, onResize, onContent, isCo
       )}
     </div>
   );
-}
+});
 
 // Arrow overlay renderer
-function ArrowLayer({ blocks, connections, drawingConn, boardRef, onDeleteConnection, onDragConnection }) {
+const ArrowLayer = React.memo(function ArrowLayer({ blocks, connections, drawingConn, boardRef, onDeleteConnection, onDragConnection }) {
   // Get edge points for a connection
   const getEdgePoints = (b1, b2) => {
     if (!b1 || !b2) return null;
@@ -215,7 +215,7 @@ function ArrowLayer({ blocks, connections, drawingConn, boardRef, onDeleteConnec
       })()}
     </svg>
   );
-}
+});
 
 export function EmbeddedCanvas({ data, onChange }) {
   const [blocks, setBlocks] = useState([]);

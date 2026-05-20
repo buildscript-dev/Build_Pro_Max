@@ -18,7 +18,7 @@ const CONTAINER_TYPES = [
 const STICKY_COLORS = ['#fef3c7', '#fce7f3', '#dbeafe', '#d1fae5', '#ede9fe', '#fee2e2'];
 
 // ─── Single container renderer ──────────────────────────────────────────────────
-function ContainerBlock({ el, isSelected, onSelect, onDrag, onResize, onContent }) {
+const ContainerBlock = React.memo(function ContainerBlock({ el, isSelected, onSelect, onDrag, onResize, onContent }) {
   const dragRef = useRef(null);
   const isDragging = useRef(false);
   const resizeRef = useRef(null);
@@ -302,7 +302,7 @@ function ContainerBlock({ el, isSelected, onSelect, onDrag, onResize, onContent 
       )}
     </div>
   );
-}
+});
 
 // ─── Main NoteCanvas ─────────────────────────────────────────────────────────────
 export function NoteCanvas({ value = '', onChange, readOnly = false }) {
