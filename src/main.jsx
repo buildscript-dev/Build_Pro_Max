@@ -44,9 +44,13 @@ function setupCrossTabSync() {
   // Listen for localStorage changes from other tabs (fallback)
   window.addEventListener('storage', (e) => {
     if (e.key === STORAGE_KEY && e.newValue) {
-      window.dispatchEvent(new CustomEvent('build_pro_max_state_sync', {
-        detail: JSON.parse(e.newValue),
-      }));
+      try {
+        window.dispatchEvent(new CustomEvent('build_pro_max_state_sync', {
+          detail: JSON.parse(e.newValue),
+        }));
+      } catch {
+        // Ignore corrupted storage data
+      }
     }
   });
 

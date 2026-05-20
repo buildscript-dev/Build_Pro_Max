@@ -90,7 +90,7 @@ export const GlassCard = ({
 };
 
 // ─── Layered button (paper inset + glass top) ───────────────────────────────
-export const PaperButton = ({ children, accent = false, primary = false, small = false, onClick, icon, style = {} }) => {
+export const PaperButton = ({ children, accent = false, primary = false, small = false, onClick, icon, style = {}, disabled = false, type = "button", "aria-label": ariaLabel }) => {
   const h = small ? 30 : 38;
   const bg = primary
     ? "linear-gradient(180deg, #f5a524 0%, #f06b1c 100%)"
@@ -103,16 +103,23 @@ export const PaperButton = ({ children, accent = false, primary = false, small =
     ? "0 1px 0 rgba(255,255,255,.45) inset, 0 -1px 0 rgba(0,0,0,.10) inset, 0 4px 10px -2px rgba(240,107,28,.35)"
     : "0 1px 0 rgba(255,255,255,.7) inset, 0 1px 2px rgba(46,30,12,.08)";
   return (
-    <button onClick={onClick} style={{
-      height: h, padding: small ? "0 12px" : "0 16px", borderRadius: 999,
-      background: bg, color, border, boxShadow: shadow,
-      fontSize: small ? 12 : 13, fontWeight: 500, gap: 8,
-      backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-      transition: "transform var(--motion-quick) var(--ease-snap), box-shadow var(--motion-quick) var(--ease-snap)",
-      ...style,
-    }}
-    onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-0.5px)"; }}
-    onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      style={{
+        height: h, padding: small ? "0 12px" : "0 16px", borderRadius: 999,
+        background: bg, color, border, boxShadow: shadow,
+        fontSize: small ? 12 : 13, fontWeight: 500, gap: 8,
+        backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+        transition: "transform var(--motion-quick) var(--ease-snap), box-shadow var(--motion-quick) var(--ease-snap)",
+        opacity: disabled ? 0.5 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
+        ...style,
+      }}
+      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.transform = "translateY(-1px)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = ""; }}
     >
       {icon && <Icon name={icon} size={small ? 14 : 16} />}
       {children}

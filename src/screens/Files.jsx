@@ -42,7 +42,23 @@ export const Files = () => {
   const attachToCalendar = () => {
     const memo = files.find(f => f.name.toLowerCase().includes('memo') || f.kind === 'pdf');
     if (memo) {
-      actions.addNotification({ text: `"${memo.name}" attached to 14:30 calendar block`, kind: 'info' });
+      const now = new Date();
+      const target = state.events?.find(e => e.time === '14:30' || /bessemer|memo|follow/i.test(e.title || ''));
+      if (target) {
+        actions.updateEvent({ ...target, attachment: memo.id || memo.name, attachmentName: memo.name });
+      } else {
+        actions.addEvent({
+          title: 'Review attached memo',
+          day: now.getDate(),
+          month: now.getMonth(),
+          year: now.getFullYear(),
+          time: '14:30',
+          color: 'orange',
+          attachment: memo.id || memo.name,
+          attachmentName: memo.name,
+        });
+      }
+      actions.addNotification({ text: `"${memo.name}" attached to the 14:30 calendar block`, kind: 'info' });
     } else {
       actions.addNotification({ text: `No memo file found to attach`, kind: 'info' });
     }
@@ -201,7 +217,7 @@ export const Files = () => {
             "I see <strong>Bessemer-memo-v3.pdf</strong> just landed on your phone. Want me to attach it to the 14:30 calendar block automatically?"
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-            <PaperButton small>Not now</PaperButton>
+            <PaperButton small onClick={() => actions.addNotification({ text: 'Skipped attachment', kind: 'info' })}>Not now</PaperButton>
             <PaperButton small primary onClick={attachToCalendar}>Yes, attach</PaperButton>
           </div>
           <div className="hair" style={{ margin: "16px 0" }}/>

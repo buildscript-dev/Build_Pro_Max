@@ -21,15 +21,20 @@ export const Contacts = () => {
   const [editing, setEditing] = useState(false);
   const [aiDraft, setAiDraft] = useState('');
   const [aiDraftLoading, setAiDraftLoading] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const c = contacts.find(c => c.id === selId);
 
-  // Auto-select first contact if nothing selected
+  // Auto-select first contact if nothing selected or selected contact no longer exists
   useEffect(() => {
-    if (!selId && contacts.length > 0) {
+    if (contacts.length === 0) {
+      if (selId) setSelId(null);
+      return;
+    }
+    if (!selId || !contacts.find(c => c.id === selId)) {
       setSelId(contacts[0].id);
     }
-  }, [contacts, selId]);
+  }, [contacts]);
 
   const syncFromGmail = useCallback(async () => {
     if (!isGmailConnected()) {
@@ -64,9 +69,10 @@ export const Contacts = () => {
   };
 
   const deleteContact = (contactId) => {
+    if (confirmDeleteId !== contactId) { setConfirmDeleteId(contactId); return; }
     const contact = contacts.find(c => c.id === contactId);
     if (!contact) return;
-    if (!window.confirm(`Delete "${contact.name}"?`)) return;
+    setConfirmDeleteId(null);
     actions.deleteContact(contact.id);
     actions.addNotification({ text: `Contact "${contact.name}" deleted`, kind: 'info' });
     if (selId === contactId) {
@@ -177,13 +183,14 @@ export const Contacts = () => {
             <span/><span className="t-cap">Person</span><span className="t-cap">Tag</span><span className="t-cap">Warmth</span><span className="t-cap">Last touch</span><span/>
           </div>
           {contacts.map((contact) => (
-            <div key={contact.id} onClick={() => setSelId(contact.id)} style={{
+            <div key={contact.id} onClick={() => { setSelId(contact.id); setConfirmDeleteId(null); }} style={{
               padding: "12px 22px", display: "grid", gridTemplateColumns: "44px 1fr 100px 80px 110px auto",
               gap: 12, alignItems: "center",
               borderBottom: contact.id !== contacts[contacts.length - 1].id ? "0.5px solid var(--ink-line)" : "none",
               background: selId === contact.id ? "rgba(245,165,36,.10)" : "transparent",
               boxShadow: selId === contact.id ? "inset 3px 0 0 var(--accent-orange)" : "none",
-              cursor: "default",
+              cursor: "pointer",
+              transition: "background 120ms",
             }}>
               <Avatar initials={contact.avatar || contact.name?.[0] || '?'} color={contact.color} size={36} />
               <div>
@@ -203,7 +210,10 @@ export const Contacts = () => {
                 }}/>
               </div>
               <span style={{ fontSize: 11, color: "var(--ink-3)" }}>{contact.last}</span>
-              <button onClick={(e) => { e.stopPropagation(); deleteContact(contact.id); }} style={{ fontSize: 10, color: "var(--ink-4)", padding: "2px 6px" }}>✕</button>
+              {confirmDeleteId === contact.id
+                ? <><button onClick={(e) => { e.stopPropagation(); deleteContact(contact.id); }} style={{ fontSize: 10, color: "var(--accent-coral)", fontWeight: 600, padding: "2px 6px" }}>Delete?</button><button onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }} style={{ fontSize: 10, color: "var(--ink-4)", padding: "2px 4px" }}>✕</button></>
+                : <button onClick={(e) => { e.stopPropagation(); deleteContact(contact.id); }} style={{ fontSize: 10, color: "var(--ink-4)", padding: "2px 6px" }}>✕</button>
+              }
             </div>
           ))}
           {contacts.length === 0 && (
@@ -266,7 +276,10 @@ export const Contacts = () => {
                       Drafting…
                     </span>
                   ) : 'AI draft email'}</PaperButton>
-                  <PaperButton small accent onClick={() => deleteContact(c.id)}>Delete</PaperButton>
+                  {confirmDeleteId === c.id
+                    ? <><PaperButton small accent onClick={() => deleteContact(c.id)}>Confirm delete</PaperButton><PaperButton small onClick={() => setConfirmDeleteId(null)}>Cancel</PaperButton></>
+                    : <PaperButton small accent onClick={() => deleteContact(c.id)}>Delete</PaperButton>
+                  }
                 </div>
               </GlassCard>
               {c.ai && (

@@ -3,9 +3,11 @@ import { GlassCard, PaperButton, Icon, AiOrb, Avatar } from '../components/ui/Ic
 import { accentColor } from '../data';
 import { useApp } from '../store/AppContext';
 
-export const Onboarding = () => {
+export const Onboarding = ({ onComplete }) => {
   const { actions } = useApp();
   const [step, setStep] = useState(0);
+  const [selectedTrack, setSelectedTrack] = useState('Close the seed round');
+  const [selectedTone, setSelectedTone] = useState('Direct');
   const steps = [
     { id: 0, label: "Welcome", icon: "orb" },
     { id: 1, label: "Connect", icon: "sync" },
@@ -15,7 +17,27 @@ export const Onboarding = () => {
   ];
 
   const complete = () => {
+    try {
+      localStorage.setItem('onboarding_complete', 'true');
+      localStorage.setItem('ai_personality', JSON.stringify({
+        voice: 'background',
+        autoPlan: true,
+        moodDetection: true,
+        relWatcher: true,
+        tone: selectedTone.toLowerCase(),
+        role: '',
+      }));
+    } catch { /* ignore storage failures */ }
+    actions.addTask({
+      title: selectedTrack,
+      project: selectedTrack.includes('seed') ? 'Fundraise' : selectedTrack.includes('onboarding') ? 'Product' : selectedTrack.includes('designer') ? 'Hiring' : 'General',
+      priority: 'P0',
+      due: 'Today',
+      status: 'todo',
+      ai: 'Created from onboarding track',
+    });
     actions.addNotification({ text: 'Onboarding complete! Welcome to Build_PRO_MAX_1', kind: 'info' });
+    onComplete?.();
   };
 
   return (
@@ -66,9 +88,9 @@ export const Onboarding = () => {
               </p>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 28 }}>
                 {[
-                  { name: "Google Calendar", connected: true,  meta: "lior@halcyonlabs.io" },
-                  { name: "iCloud",          connected: true,  meta: "Auto-detected" },
-                  { name: "Slack",           connected: true,  meta: "Halcyon workspace" },
+                  { name: "Google Calendar", connected: false, meta: "Set up in Settings" },
+                  { name: "iCloud",          connected: false, meta: "Coming soon" },
+                  { name: "Slack",           connected: false, meta: "Coming soon" },
                   { name: "Linear",          connected: false, meta: "For task sync" },
                   { name: "Notion",          connected: false, meta: "Import only" },
                   { name: "Gmail",           connected: false, meta: "Drafts + threads" },
@@ -85,7 +107,7 @@ export const Onboarding = () => {
                     </div>
                     {c.connected
                       ? <Icon name="check" size={16} color="var(--ok)" />
-                      : <PaperButton small onClick={() => actions.addNotification({ text: `${c.name} connected`, kind: 'info' })}>Connect</PaperButton>}
+                      : <PaperButton small onClick={() => actions.addNotification({ text: `${c.name} setup lives in Settings → Connected accounts`, kind: 'info' })}>Set up later</PaperButton>}
                   </div>
                 ))}
               </div>
@@ -99,23 +121,25 @@ export const Onboarding = () => {
               </p>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginTop: 28 }}>
                 {[
-                  { name: "Close the seed round", color: "coral", picked: true },
+                  { name: "Close the seed round", color: "coral" },
                   { name: "Ship onboarding v3",   color: "orange" },
                   { name: "Hire founding designer", color: "amber" },
                   { name: "Reading every morning", color: "rose" },
                 ].map(t => (
-                  <div key={t.name} style={{
+                  <button key={t.name} onClick={() => setSelectedTrack(t.name)} style={{
+                    all: 'unset',
                     padding: 16, borderRadius: 14,
-                    background: t.picked ? `${accentColor[t.color]}18` : "rgba(255,252,244,.55)",
-                    border: `0.5px solid ${t.picked ? accentColor[t.color] + "55" : "rgba(26,20,16,.08)"}`,
-                    boxShadow: t.picked ? `inset 0 0 0 1px ${accentColor[t.color]}33` : "none",
+                    background: selectedTrack === t.name ? `${accentColor[t.color]}18` : "rgba(255,252,244,.55)",
+                    border: `0.5px solid ${selectedTrack === t.name ? accentColor[t.color] + "55" : "rgba(26,20,16,.08)"}`,
+                    boxShadow: selectedTrack === t.name ? `inset 0 0 0 1px ${accentColor[t.color]}33` : "none",
+                    cursor: 'pointer',
                   }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <span style={{ width: 10, height: 10, borderRadius: 999, background: accentColor[t.color], boxShadow: `0 0 6px ${accentColor[t.color]}88` }}/>
                       <span style={{ fontSize: 14, fontWeight: 500 }}>{t.name}</span>
-                      {t.picked && <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, color: accentColor[t.color], textTransform: "uppercase", letterSpacing: "0.08em" }}>Selected</span>}
+                      {selectedTrack === t.name && <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, color: accentColor[t.color], textTransform: "uppercase", letterSpacing: "0.08em" }}>Selected</span>}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -127,17 +151,19 @@ export const Onboarding = () => {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 28 }}>
                 {[
                   { name: "Polite",   sub: "Soft, supportive, careful with your time." },
-                  { name: "Direct",   sub: "Tells you what's broken without softening.", picked: true },
+                  { name: "Direct",   sub: "Tells you what's broken without softening." },
                   { name: "Brutal",   sub: "Founder-mode. No buffer. May sting." },
                 ].map(t => (
-                  <div key={t.name} style={{
+                  <button key={t.name} onClick={() => setSelectedTone(t.name)} style={{
+                    all: 'unset',
                     padding: 18, borderRadius: 14,
-                    background: t.picked ? "rgba(245,165,36,.16)" : "rgba(255,252,244,.55)",
-                    border: `0.5px solid ${t.picked ? "rgba(245,165,36,.5)" : "rgba(26,20,16,.08)"}`,
+                    background: selectedTone === t.name ? "rgba(245,165,36,.16)" : "rgba(255,252,244,.55)",
+                    border: `0.5px solid ${selectedTone === t.name ? "rgba(245,165,36,.5)" : "rgba(26,20,16,.08)"}`,
+                    cursor: 'pointer',
                   }}>
                     <div className="t-display" style={{ fontSize: 24 }}>{t.name}</div>
                     <div style={{ fontSize: 12.5, color: "var(--ink-2)", marginTop: 6, lineHeight: 1.4 }}>{t.sub}</div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>

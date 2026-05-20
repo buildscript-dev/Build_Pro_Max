@@ -90,16 +90,16 @@ export const Auth = ({ onAuth }) => {
                 </div>
               )}
 
-              <PaperButton primary style={{ width: '100%', justifyContent: 'center', height: 42 }} disabled={loading}>
+              <PaperButton type="submit" primary style={{ width: '100%', justifyContent: 'center', height: 42 }} disabled={loading}>
                 {loading ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
               </PaperButton>
             </form>
 
             <div style={{ marginTop: 20, textAlign: 'center', fontSize: 12.5, color: 'var(--ink-3)' }}>
               {mode === 'login' ? (
-                <>Don't have an account?{' '}<button onClick={() => { setMode('signup'); setError(''); }} style={{ color: 'var(--accent-orange)', cursor: 'pointer', textDecoration: 'underline' }}>Sign up</button></>
+                <>Don't have an account?{' '}<button type="button" onClick={() => { setMode('signup'); setError(''); }} style={{ color: 'var(--accent-orange)', textDecoration: 'underline' }}>Sign up</button></>
               ) : (
-                <>Already have an account?{' '}<button onClick={() => { setMode('login'); setError(''); }} style={{ color: 'var(--accent-orange)', cursor: 'pointer', textDecoration: 'underline' }}>Sign in</button></>
+                <>Already have an account?{' '}<button type="button" onClick={() => { setMode('login'); setError(''); }} style={{ color: 'var(--accent-orange)', textDecoration: 'underline' }}>Sign in</button></>
               )}
             </div>
           </div>

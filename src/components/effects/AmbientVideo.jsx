@@ -25,7 +25,7 @@ export const AmbientVideo = () => {
         muted
         loop
         playsInline
-        preload="none"
+        preload="metadata"
         poster=""
         src={VIDEO_SRC}
       />

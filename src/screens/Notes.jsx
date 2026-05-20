@@ -3,6 +3,7 @@ import { GlassCard, PaperButton, Icon, AiOrb } from '../components/ui/Icons';
 import { useApp } from '../store/AppContext';
 import { ScreenShell } from '../components/ui/ScreenShell';
 import { ScreenGuide } from '../components/ui/ScreenGuide';
+import { extractEnvironmentState, extractEventsAndReminders, extractLearningItems, generateLearningNote, createAutomationSummary, compileLearningIntoBook, formatBookAsNote } from '../services/environment';
 
 const TAGS = ['Fundraise', 'Hiring', 'Network', 'Pages', 'Reading', 'Product', 'General', 'Inbox', 'Design', 'Engineering', 'Gym', 'Personal'];
 
@@ -18,6 +19,8 @@ export const Notes = () => {
   const [audioLevelArray, setAudioLevelArray] = useState(Array(15).fill(4));
   const [transcriptionStream, setTranscriptionStream] = useState('');
   
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
   // AI processing loading states
   const [isAiProcessing, setIsAiProcessing] = useState(false);
 
@@ -27,8 +30,18 @@ export const Notes = () => {
   const dataArrayRef = useRef(null);
   const animationFrameRef = useRef(null);
   const streamRef = useRef(null);
+  const isRecordingRef = useRef(isRecording);
+  const fallbackIntervalRef = useRef(null);
+  const simulationTimeoutsRef = useRef([]);
+  // Refs to avoid stale closures in async speech recognition handlers
+  const preRecordingContentRef = useRef('');
+  const transcriptionAccumulatedRef = useRef('');
 
   const selected = notes.find(n => n.id === selectedId);
+
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
 
   // Auto-select first note if nothing selected
   useEffect(() => {
@@ -51,7 +64,7 @@ export const Notes = () => {
   // Debounced auto-save & auto-AI processing helper
   const aiProcessTimeout = useRef(null);
 
-  // Local rule-based AI processing for instant auto-categorization, title generation, tag selection and event extraction
+  // Local rule-based AI processing for instant auto-categorization, title generation, tag selection, event extraction, and environment automation
   const runAiAnalysis = (content, noteId) => {
     if (!content.trim()) return;
 
@@ -69,10 +82,10 @@ export const Notes = () => {
     } else if (/hiring|recruit|interview|resume|candidate|hire/i.test(text)) {
       tag = 'Hiring';
       icon = 'contacts';
-    } else if (/study|learn|book|reading|read|course|exam/i.test(text)) {
-      tag = 'Reading';
+    } else if (/study|learn|book|reading|read|course|exam|tutorial|practice/i.test(text)) {
+      tag = 'Learning';
       icon = 'sparkle';
-    } else if (/code|engineering|debug|dev|architect|software|github/i.test(text)) {
+    } else if (/code|engineering|debug|dev|architect|software|github|function|component|api|error|bug/i.test(text)) {
       tag = 'Engineering';
       icon = 'cmd';
     } else if (/meeting|sync|call|calendar|schedule|discussion/i.test(text)) {
@@ -87,7 +100,6 @@ export const Notes = () => {
     let currentNote = notes.find(n => n.id === noteId);
     let title = currentNote?.title || 'Untitled';
     if (!currentNote || title === 'Untitled' || title === 'Quick capture' || title.startsWith('Voice Note') || title === 'New note') {
-      // Pick first 4-5 words or a smart action phrase
       const cleanContent = content.replace(/[#*`]/g, '').trim();
       const firstLine = cleanContent.split('\n')[0];
       if (firstLine.length < 35 && firstLine.length > 3) {
@@ -98,18 +110,22 @@ export const Notes = () => {
       }
     }
 
-    // 3. Smart Time & Action Extraction (e.g. "3:00 am meeting with Bessemer")
+    // 3. AI Environment Engine: Detect user state from text
+    const envState = extractEnvironmentState(content);
+    const extractedItems = extractEventsAndReminders(content);
+    const learningItems = envState.isLearningSession ? extractLearningItems(content) : null;
+
+    // 4. Smart Time & Action Extraction
     let aiSummary = "I've cataloged your thoughts under " + tag + ".";
     let extractedActions = [];
 
-    // Meeting/Time regex e.g. "3:00 am meeting" or "meeting at 3 pm"
     const timeMatch = content.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)\b/i);
     const dateMatch = content.match(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i);
-    
+
     if (timeMatch) {
       const fullTime = timeMatch[0];
       const activity = /meeting|gym|workout|call|sync|dinner|study/i.test(text)
-        ? text.match(/meeting\s+with\s+\w+|gym|workout|call\s+with\s+\w+|sync|dinner/i)?.[0] || 'Scheduled Activity'
+        ? text.match(/meeting\s+with\s+\w+|gym|workout|call\s+with\s+\w+|sync|dinner|study|practice/i)?.[0] || 'Scheduled Activity'
         : 'Note reminder';
 
       extractedActions.push({
@@ -122,7 +138,13 @@ export const Notes = () => {
       aiSummary = `⚡ AI Second Brain: Detected a time-based prompt for "${fullTime}". I have automatically set a reminder and created a time block in your Planner.`;
     }
 
-    // Trigger state update
+    // 5. Build AI summary with environment context
+    const automationSummary = createAutomationSummary(envState, { ...extractedItems, ...(learningItems || {}) });
+    if (automationSummary) {
+      aiSummary = automationSummary;
+    }
+
+    // 6. Trigger state update
     actions.updateNote({
       id: noteId,
       title,
@@ -132,22 +154,72 @@ export const Notes = () => {
       content,
     });
 
-    // Automatically execute and insert extracted items into state!
-    extractedActions.forEach(act => {
-      // Check if this action hasn't been added already to prevent double-scheduling
+    // 7. Execute extracted reminders
+    extractedItems.reminders.forEach(act => {
       const alreadyScheduled = state.reminders?.some(r => r.title === act.title && r.time === act.time);
       if (!alreadyScheduled) {
-        actions.addReminder({
-          title: act.title,
-          time: act.time,
-          kind: 'ai'
-        });
+        actions.addReminder(act);
         actions.addNotification({
           text: `⏰ AI automated: Scheduled "${act.title}" for ${act.time}`,
           kind: 'info'
         });
       }
     });
+
+    // 8. Execute extracted tasks
+    extractedItems.tasks.forEach(task => {
+      const alreadyExists = state.tasks?.some(t => t.title === task.title && t.status !== 'done');
+      if (!alreadyExists) {
+        actions.addTask(task);
+        actions.addNotification({
+          text: `📋 AI extracted task: "${task.title}"`,
+          kind: 'info'
+        });
+      }
+    });
+
+    // 9. Execute extracted events
+    extractedItems.events.forEach(event => {
+      const alreadyExists = state.events?.some(e => e.title === event.title && e.day === event.day);
+      if (!alreadyExists) {
+        actions.addEvent(event);
+      }
+    });
+
+    // 10. If learning mode detected, auto-generate a structured learning note
+    if (envState.isLearningSession && learningItems && state.automationEnabled !== false) {
+      const hasMeaningfulContent = learningItems.concepts.length > 0 || learningItems.codeBlocks.length > 0 || learningItems.errors.length > 0 || learningItems.questions.length > 0;
+      if (hasMeaningfulContent) {
+        const learningNote = generateLearningNote(learningItems, title);
+        const alreadyGenerated = state.notes?.some(n => n.title === learningNote.title && n.tag === 'Learning');
+        if (!alreadyGenerated) {
+          actions.addNote(learningNote);
+          actions.addNotification({
+            text: `🧠 AI auto-captured learning session: ${learningItems.concepts.length} concepts, ${learningItems.codeBlocks.length} code blocks`,
+            kind: 'info'
+          });
+        }
+      }
+    }
+
+    // 11. Audit log for environment automation
+    if (envState.shouldAct && envState.mode !== 'normal' && state.automationEnabled !== false) {
+      actions.addAuditLog({
+        action: 'environment_mode_change',
+        mode: envState.mode,
+        source: 'note',
+        noteId,
+        confidence: envState.confidence,
+        details: {
+          silenceNotifications: envState.silenceNotifications,
+          autoReply: envState.autoReply,
+          isLearningSession: envState.isLearningSession,
+        }
+      });
+
+      // Update environment mode in state
+      actions.setTweak('environmentMode', envState.mode);
+    }
   };
 
   // Triggered on any note content typing
@@ -186,7 +258,9 @@ export const Notes = () => {
   };
 
   const createEmptyNote = () => {
+    const id = `n_${Date.now().toString(36)}`;
     const note = {
+      id,
       title: 'New note',
       tag: 'General',
       icon: 'notes',
@@ -197,20 +271,15 @@ export const Notes = () => {
       words: 0,
       ai: 'Start writing or recording. I will automatically title, tag, and schedule actions for you.'
     };
-    // Reducer generates a unique id
     actions.addNote(note);
-    // Find the newly created note's ID (which would be at index 0 because notes list is unshifted)
-    setTimeout(() => {
-      const freshNote = state.notes?.[0];
-      if (freshNote) {
-        setSelectedId(freshNote.id);
-      }
-    }, 50);
+    setSelectedId(id);
+    return id;
   };
 
   const deleteNote = (id) => {
+    if (confirmDeleteId !== id) { setConfirmDeleteId(id); return; }
     const n = notes.find(x => x.id === id);
-    if (!window.confirm(`Delete "${n?.title || 'untitled'}"?`)) return;
+    setConfirmDeleteId(null);
     actions.deleteNote(id);
     if (id === selectedId) {
       setSelectedId(notes.filter(x => x.id !== id)[0]?.id || null);
@@ -274,44 +343,52 @@ export const Notes = () => {
     if (isRecording) {
       // STOP recording
       setIsRecording(false);
+      isRecordingRef.current = false;
       
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
 
       // Cleanup Web Audio API refs
+      if (fallbackIntervalRef.current) clearInterval(fallbackIntervalRef.current);
+      simulationTimeoutsRef.current.forEach(clearTimeout);
+      simulationTimeoutsRef.current = [];
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       if (audioContextRef.current) audioContextRef.current.close();
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
       
+      fallbackIntervalRef.current = null;
       audioContextRef.current = null;
       analyserRef.current = null;
       streamRef.current = null;
 
-      // If we used the simulated voice stream, push transcription directly
-      if (transcriptionStream) {
+      // Content is already live in the note from streaming — just trigger AI analysis
+      const base = preRecordingContentRef.current;
+      const accumulated = transcriptionAccumulatedRef.current;
+      const finalContent = base ? (accumulated ? base + '\n' + accumulated : base) : accumulated;
+      setTranscriptionStream('');
+      if (finalContent.trim()) {
         setIsAiProcessing(true);
         setTimeout(() => {
-          const finalVal = (selected?.content ? selected.content + '\n' : '') + transcriptionStream;
-          handleContentChange(finalVal);
+          runAiAnalysis(finalContent, selectedId);
           setIsAiProcessing(false);
-          setTranscriptionStream('');
           actions.addNotification({ text: "Voice note transcribed & compiled!", kind: "info" });
-        }, 1000);
+        }, 800);
       }
     } else {
       // START recording
       setIsRecording(true);
+      isRecordingRef.current = true;
       setTranscriptionStream('');
       setAudioLevelArray(Array(15).fill(4));
+      // Capture pre-recording content so onresult handlers never use stale closure
+      preRecordingContentRef.current = selected?.content || '';
+      transcriptionAccumulatedRef.current = '';
 
       // Make sure we have an active note, if not create one
       let currentId = selectedId;
       if (!selected) {
-        createEmptyNote();
-        // Wait a tiny bit for state to commit
-        await new Promise(r => setTimeout(r, 100));
-        currentId = state.notes?.[0]?.id || selectedId;
+        currentId = createEmptyNote();
       }
 
       // 1. Try accessing real microphone for Web Audio wave visualizer
@@ -322,9 +399,10 @@ export const Notes = () => {
       } catch (err) {
         console.warn("Microphone hardware access not granted. Falling back to intelligent software wave animation.");
         // Software bounce interval fallback
-        const iv = setInterval(() => {
-          if (!isRecording) {
-            clearInterval(iv);
+        fallbackIntervalRef.current = setInterval(() => {
+          if (!isRecordingRef.current) {
+            clearInterval(fallbackIntervalRef.current);
+            fallbackIntervalRef.current = null;
             return;
           }
           setAudioLevelArray(Array(15).fill(0).map(() => Math.floor(Math.random() * 32) + 6));
@@ -341,30 +419,36 @@ export const Notes = () => {
         rec.lang = 'en-US';
 
         rec.onresult = (event) => {
-          let interim = '';
-          let final = '';
+          let interimText = '';
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             if (event.results[i].isFinal) {
-              final += event.results[i][0].transcript + ' ';
+              // Accumulate finals via ref — avoids stale closure on notes array
+              transcriptionAccumulatedRef.current += event.results[i][0].transcript + ' ';
             } else {
-              interim += event.results[i][0].transcript;
+              interimText += event.results[i][0].transcript;
             }
           }
-          const text = final || interim;
-          setTranscriptionStream(text);
+          const displayText = transcriptionAccumulatedRef.current + interimText;
+          setTranscriptionStream(displayText);
 
-          // Stream directly into content input
-          if (selected) {
-            const baseContent = selected.content ? selected.content.split('\n')[0] === 'Voice Note stream...' ? '' : selected.content + '\n' : '';
+          // Stream directly into the note using stable refs (not stale closure)
+          if (currentId) {
+            const base = preRecordingContentRef.current;
             actions.updateNote({
-              id: selectedId,
-              content: baseContent + text
+              id: currentId,
+              content: base ? base + '\n' + displayText : displayText,
             });
           }
         };
 
         rec.onerror = (e) => console.warn("SpeechRec error: ", e);
-        rec.onend = () => setIsRecording(false);
+        rec.onend = () => {
+          // Use ref to check current recording state
+          if (isRecordingRef.current) {
+            setIsRecording(false);
+            isRecordingRef.current = false;
+          }
+        };
         recognitionRef.current = rec;
         rec.start();
       } else {
@@ -380,22 +464,38 @@ export const Notes = () => {
 
         let currentPhraseIndex = 0;
         let charIndex = 0;
-        let cumulativeText = '';
 
         const typeSimulatedText = () => {
+          if (!isRecordingRef.current) return;
           if (currentPhraseIndex >= simulationPhrases.length) {
+            // Auto-stop: trigger AI analysis on accumulated content
             setIsRecording(false);
+            isRecordingRef.current = false;
+            const base = preRecordingContentRef.current;
+            const accumulated = transcriptionAccumulatedRef.current;
+            const finalContent = base ? (accumulated ? base + '\n' + accumulated : base) : accumulated;
+            setTranscriptionStream('');
+            if (finalContent.trim()) {
+              setIsAiProcessing(true);
+              setTimeout(() => {
+                runAiAnalysis(finalContent, currentId);
+                setIsAiProcessing(false);
+                actions.addNotification({ text: "Voice note transcribed & compiled!", kind: "info" });
+              }, 800);
+            }
             return;
           }
 
           const phrase = simulationPhrases[currentPhraseIndex];
-          cumulativeText += phrase[charIndex];
+          transcriptionAccumulatedRef.current += phrase[charIndex];
+          const cumulativeText = transcriptionAccumulatedRef.current;
           setTranscriptionStream(cumulativeText);
 
-          if (selected) {
+          if (currentId) {
+            const base = preRecordingContentRef.current;
             actions.updateNote({
               id: currentId,
-              content: cumulativeText
+              content: base ? base + '\n' + cumulativeText : cumulativeText,
             });
           }
 
@@ -403,14 +503,14 @@ export const Notes = () => {
           if (charIndex >= phrase.length) {
             currentPhraseIndex++;
             charIndex = 0;
-            setTimeout(typeSimulatedText, 600); // pause between logical phrases
+            simulationTimeoutsRef.current.push(setTimeout(typeSimulatedText, 600));
           } else {
-            setTimeout(typeSimulatedText, 45); // fast character typing speed
+            simulationTimeoutsRef.current.push(setTimeout(typeSimulatedText, 45));
           }
         };
 
         // Start typing simulator
-        setTimeout(typeSimulatedText, 400);
+        simulationTimeoutsRef.current.push(setTimeout(typeSimulatedText, 400));
       }
     }
   };
@@ -419,8 +519,11 @@ export const Notes = () => {
   useEffect(() => {
     return () => {
       if (aiProcessTimeout.current) clearTimeout(aiProcessTimeout.current);
+      if (fallbackIntervalRef.current) clearInterval(fallbackIntervalRef.current);
+      simulationTimeoutsRef.current.forEach(clearTimeout);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       if (audioContextRef.current) audioContextRef.current.close();
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
     };
   }, []);
 
@@ -541,15 +644,14 @@ export const Notes = () => {
                   >
                     {selected.pinned ? '● Pinned' : '○ Pin'}
                   </button>
-                  <button
-                    onClick={() => deleteNote(selected.id)}
-                    style={{
-                      fontSize: 11, background: "none", border: "none", cursor: "pointer",
-                      color: "var(--accent-coral)", padding: "4px 8px"
-                    }}
-                  >
-                    Delete
-                  </button>
+                  {confirmDeleteId === selected.id ? (
+                    <>
+                      <button onClick={() => deleteNote(selected.id)} style={{ fontSize: 11, color: "#fff", background: "var(--accent-coral)", padding: "4px 10px", borderRadius: 6, cursor: "pointer" }}>Confirm delete</button>
+                      <button onClick={() => setConfirmDeleteId(null)} style={{ fontSize: 11, color: "var(--ink-3)", padding: "4px 8px", cursor: "pointer" }}>Cancel</button>
+                    </>
+                  ) : (
+                    <button onClick={() => deleteNote(selected.id)} style={{ fontSize: 11, background: "none", border: "none", cursor: "pointer", color: "var(--accent-coral)", padding: "4px 8px" }}>Delete</button>
+                  )}
                 </div>
               </div>
 
@@ -603,7 +705,7 @@ export const Notes = () => {
                     {/* Streaming draft transcription */}
                     <div style={{
                       padding: "10px 18px", borderRadius: 8, background: "rgba(26,20,16,.03)",
-                      fontSize: 13, color: "var(--ink-2)", italic: true, maxWidth: "80%",
+                      fontSize: 13, color: "var(--ink-2)", fontStyle: "italic", maxWidth: "80%",
                       textAlign: "center", minHeight: 40, border: "0.5px solid var(--ink-line)"
                     }}>
                       "{transcriptionStream || 'Speak now...'}"
@@ -647,6 +749,27 @@ export const Notes = () => {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <AiOrb size={20} intensity={1.2} />
               <div className="t-cap" style={{ color: "var(--accent-orange)" }}>AI Assistant</div>
+              {state.tweaks?.environmentMode && state.tweaks?.environmentMode !== 'normal' && (
+                <span className="chip" style={{
+                  marginLeft: 'auto',
+                  background: state.tweaks?.environmentMode === 'learning' ? 'rgba(74,158,255,.12)' :
+                    state.tweaks?.environmentMode === 'rest' ? 'rgba(106,106,255,.12)' :
+                    state.tweaks?.environmentMode === 'focus' ? 'rgba(232,160,32,.12)' :
+                    state.tweaks?.environmentMode === 'sickness' ? 'rgba(232,80,80,.12)' : 'rgba(200,200,200,.12)',
+                  color: state.tweaks?.environmentMode === 'learning' ? '#4a9eff' :
+                    state.tweaks?.environmentMode === 'rest' ? '#6a6aff' :
+                    state.tweaks?.environmentMode === 'focus' ? '#e8a020' :
+                    state.tweaks?.environmentMode === 'sickness' ? '#e85050' : 'var(--ink-2)',
+                }}>
+                  {state.tweaks?.environmentMode === 'learning' ? '🧠 Learning' :
+                    state.tweaks?.environmentMode === 'rest' ? '🌙 Rest' :
+                    state.tweaks?.environmentMode === 'focus' ? '🎯 Focus' :
+                    state.tweaks?.environmentMode === 'sickness' ? '🤒 Sick' :
+                    state.tweaks?.environmentMode === 'shelter' ? '🛡️ Shelter' :
+                    state.tweaks?.environmentMode === 'redirect' ? '🔄 Redirect' :
+                    state.tweaks?.environmentMode === 'offline' ? '🔕 Away' : state.tweaks?.environmentMode}
+                </span>
+              )}
             </div>
             
             <div className="scroll" style={{ flex: 1, overflowY: "auto", fontSize: 13, lineHeight: 1.6, color: "var(--ink-1)" }}>
@@ -678,7 +801,32 @@ export const Notes = () => {
               <div>{notes.length} cataloged memories</div>
               <div>{notes.filter(n => n.pinned).length} pinned nodes</div>
               <div>{notes.reduce((s, n) => s + (n.words || 0), 0)} total words processed</div>
+              <div style={{ marginTop: 6 }}>
+                <span className="chip" style={{ background: "rgba(245,165,36,.12)", color: "var(--accent-orange)" }}>
+                  🧠 {notes.filter(n => n.tag === 'Learning').length} learning sessions
+                </span>
+              </div>
             </div>
+            {notes.filter(n => n.tag === 'Learning').length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <PaperButton
+                  icon="sparkle"
+                  small
+                  onClick={() => {
+                    const learningNotes = notes.filter(n => n.tag === 'Learning');
+                    const book = compileLearningIntoBook(learningNotes);
+                    const bookNote = formatBookAsNote(book);
+                    actions.addNote(bookNote);
+                    actions.addNotification({
+                      text: `📗 Compiled ${book.stats.totalNotes} learning sessions into a knowledge base with ${book.chapters.length} chapters`,
+                      kind: 'info',
+                    });
+                  }}
+                >
+                  📗 Compile Learning into Book
+                </PaperButton>
+              </div>
+            )}
           </GlassCard>
 
           <GlassCard>

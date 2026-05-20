@@ -93,8 +93,9 @@ export const FocusPanel = ({ focusMode, onSetMode, onNavigate, onClose }) => {
   };
 
   useEffect(() => {
-    if (!timerRunning || timer <= 0) {
-      if (timer === 0 && timerRunning) setTimerRunning(false);
+    if (!timerRunning) return;
+    if (timer <= 0) {
+      setTimerRunning(false);
       return;
     }
     timerRef.current = setInterval(() => {
@@ -107,7 +108,7 @@ export const FocusPanel = ({ focusMode, onSetMode, onNavigate, onClose }) => {
       });
     }, 1000);
     return () => clearInterval(timerRef.current);
-  }, [timerRunning, timer]);
+  }, [timerRunning]); // only re-subscribe when running state changes, not on every tick
 
   const formatTime = (sec) => {
     const m = Math.floor(sec / 60);
@@ -168,11 +169,11 @@ export const FocusPanel = ({ focusMode, onSetMode, onNavigate, onClose }) => {
                   const pct = getProgress({ steps });
                   const done = steps.filter(s => s.done).length;
                   return (
-                    <div key={track.id} onClick={() => setActiveTrackId(track.id)}
+                    <button key={track.id} onClick={() => setActiveTrackId(track.id)}
                       style={{
-                        padding: '14px 16px', borderRadius: 12, cursor: 'default',
+                        padding: '14px 16px', borderRadius: 12, cursor: 'pointer',
                         background: 'rgba(255,252,244,.6)', border: '0.5px solid var(--ink-line)',
-                        display: 'flex', alignItems: 'center', gap: 14,
+                        display: 'flex', alignItems: 'center', gap: 14, width: '100%', textAlign: 'left',
                         transition: 'all 200ms ease',
                       }}>
                       <div style={{ fontSize: 28 }}>{track.icon}</div>
@@ -186,7 +187,7 @@ export const FocusPanel = ({ focusMode, onSetMode, onNavigate, onClose }) => {
                           <span style={{ fontSize: 10.5, color: 'var(--ink-3)', fontWeight: 600 }}>{done}/{track.steps.length}</span>
                         </div>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -262,11 +263,11 @@ export const FocusPanel = ({ focusMode, onSetMode, onNavigate, onClose }) => {
                   const steps = getTrackSteps(track);
                   const pct = getProgress({ steps });
                   return (
-                    <div key={track.id} onClick={() => setActiveTrackId(track.id)}
+                    <button key={track.id} onClick={() => setActiveTrackId(track.id)}
                       style={{
-                        padding: '14px 16px', borderRadius: 12, cursor: 'default',
+                        padding: '14px 16px', borderRadius: 12, cursor: 'pointer',
                         background: 'rgba(255,252,244,.6)', border: '0.5px solid var(--ink-line)',
-                        display: 'flex', alignItems: 'center', gap: 14,
+                        display: 'flex', alignItems: 'center', gap: 14, width: '100%', textAlign: 'left',
                       }}>
                       <div style={{ fontSize: 28 }}>{track.icon}</div>
                       <div style={{ flex: 1 }}>
@@ -279,7 +280,7 @@ export const FocusPanel = ({ focusMode, onSetMode, onNavigate, onClose }) => {
                           <span style={{ fontSize: 10.5, color: 'var(--ink-3)', fontWeight: 600 }}>{steps.filter(s => s.done).length}/{track.steps.length}</span>
                         </div>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
 

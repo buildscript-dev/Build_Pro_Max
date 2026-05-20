@@ -40,7 +40,6 @@ export async function initGmailClient() {
   const apiKey = localStorage.getItem('gmail_api_key');
 
   if (!clientId || !apiKey) {
-    initPromise = Promise.resolve(false);
     return false;
   }
 
@@ -51,31 +50,31 @@ export async function initGmailClient() {
 
       await new Promise((resolve, reject) => {
         if (window.gapi?.client) { resolve(); return; }
-        gapi.load('client', { callback: resolve, onerror: reject });
+        window.gapi.load('client', { callback: resolve, onerror: reject });
       });
 
-      if (!gapi.client.getToken) {
-        await gapi.client.init({ apiKey, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest'] });
+      if (!window.gapi.client.getToken) {
+        await window.gapi.client.init({ apiKey, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest'] });
       }
 
       const savedToken = localStorage.getItem('gmail_access_token');
       if (savedToken) {
-        gapi.client.setToken({ access_token: savedToken });
+        window.gapi.client.setToken({ access_token: savedToken });
       }
 
-      tokenClient = google.accounts.oauth2.initTokenClient({
+      tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: GMAIL_SCOPE,
         callback: (resp) => {
           if (resp.access_token) {
             localStorage.setItem('gmail_access_token', resp.access_token);
-            gapi.client.setToken({ access_token: resp.access_token });
+            window.gapi.client.setToken({ access_token: resp.access_token });
           }
         },
       });
       return true;
-    } catch {
-      initPromise = null;
+    } catch (e) {
+      initPromise = null; // Reset so re-init is possible after credentials are added
       return false;
     }
   })();
@@ -91,9 +90,9 @@ export async function connectGmail() {
     tokenClient.callback = (resp) => {
       if (resp.access_token) {
         localStorage.setItem('gmail_access_token', resp.access_token);
-        gapi.client.setToken({ access_token: resp.access_token });
+        window.gapi.client.setToken({ access_token: resp.access_token });
 
-        gapi.client.gmail.users.getProfile({ userId: 'me' })
+        window.gapi.client.gmail.users.getProfile({ userId: 'me' })
           .then((profile) => {
             localStorage.setItem('gmail_email', profile.result.emailAddress);
             resolve({ ok: true, email: profile.result.emailAddress });
@@ -111,9 +110,12 @@ export async function connectGmail() {
 export async function disconnectGmail() {
   localStorage.removeItem('gmail_access_token');
   localStorage.removeItem('gmail_email');
-  if (gapi?.client?.getToken()) {
-    google.accounts.oauth2.revoke(gapi.client.getToken().access_token, () => {});
-    gapi.client.setToken(null);
+  const token = window.gapi?.client?.getToken?.();
+  if (token?.access_token && window.google?.accounts?.oauth2) {
+    window.google.accounts.oauth2.revoke(token.access_token, () => {});
+  }
+  if (window.gapi?.client?.setToken) {
+    window.gapi.client.setToken(null);
   }
 }
 
@@ -124,9 +126,9 @@ export async function getRecentEmails(maxResults = 10) {
     if (!init) return [];
 
     const token = localStorage.getItem('gmail_access_token');
-    gapi.client.setToken({ access_token: token });
+    window.gapi.client.setToken({ access_token: token });
 
-    const response = await gapi.client.gmail.users.messages.list({
+    const response = await window.gapi.client.gmail.users.messages.list({
       userId: 'me',
       maxResults,
       q: 'in:inbox',
@@ -136,7 +138,7 @@ export async function getRecentEmails(maxResults = 10) {
     const emails = [];
 
     for (const msg of messages.slice(0, 5)) {
-      const detail = await gapi.client.gmail.users.messages.get({
+      const detail = await window.gapi.client.gmail.users.messages.get({
         userId: 'me',
         id: msg.id,
         format: 'metadata',
@@ -164,7 +166,7 @@ export async function sendEmail(to, subject, body) {
     if (!init) return { ok: false, error: 'Gmail client not initialized' };
 
     const token = localStorage.getItem('gmail_access_token');
-    gapi.client.setToken({ access_token: token });
+    window.gapi.client.setToken({ access_token: token });
 
     const email = [
       `To: ${to}`,
@@ -177,7 +179,7 @@ export async function sendEmail(to, subject, body) {
 
     const base64Encoded = btoa(unescape(encodeURIComponent(email))).replace(/\+/g, '-').replace(/\//g, '_');
 
-    await gapi.client.gmail.users.messages.send({
+    await window.gapi.client.gmail.users.messages.send({
       userId: 'me',
       resource: { raw: base64Encoded },
     });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { GlassCard, PaperButton, Avatar, Icon, AiOrb } from '../components/ui/Icons';
 import { accentColor } from '../data';
 import { useApp } from '../store/AppContext';
@@ -46,17 +46,24 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
   }, []);
 
   // Focus timer with notification on complete
+  const focusRemainingRef = useRef(focusRemaining);
+  useEffect(() => { focusRemainingRef.current = focusRemaining; }, [focusRemaining]);
+
   useEffect(() => {
     if (!focusActive) return;
-    if (focusRemaining <= 0) {
-      setFocusActive(false);
-      sendNotification('Focus complete!', { body: 'Great work. Take a break.' });
-      actions.addNotification({ text: 'Focus block complete!', kind: 'info' });
-      return;
-    }
-    const id = setInterval(() => setFocusRemaining(r => Math.max(0, r - 1)), 1000);
+    const id = setInterval(() => {
+      setFocusRemaining(r => {
+        if (r <= 1) {
+          sendNotification('Focus complete!', { body: 'Great work. Take a break.' });
+          actions.addNotification({ text: 'Focus block complete!', kind: 'info' });
+          setFocusActive(false);
+          return 0;
+        }
+        return r - 1;
+      });
+    }, 1000);
     return () => clearInterval(id);
-  }, [focusActive, focusRemaining, actions]);
+  }, [focusActive, actions]);
 
   // Request notification permission on first focus
   const notifRequested = useRef(false);
@@ -108,6 +115,8 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
       setExpandedId(cardId);
     }
   };
+
+  const closeExpanded = useCallback(() => setExpandedId(null), []);
 
   // Greeting derived from live hour state
   const greeting = useMemo(() => getGreeting(hour), [hour]);
@@ -188,7 +197,7 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
       <ExpandedCard
         card={CARDS.find((c) => c.id === expandedId)}
         data={D}
-        onClose={() => setExpandedId(null)}
+        onClose={closeExpanded}
         onNavigate={onNavigate}
         actions={actions} />
       }

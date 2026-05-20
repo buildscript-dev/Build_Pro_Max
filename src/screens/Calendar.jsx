@@ -5,6 +5,30 @@ import { useApp } from '../store/AppContext';
 import { ScreenShell } from '../components/ui/ScreenShell';
 
 const COLORS = ['amber', 'orange', 'coral', 'rose'];
+const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+function eventDate(event, fallbackYear, fallbackMonth) {
+  return new Date(
+    event.year ?? fallbackYear,
+    event.month ?? fallbackMonth,
+    Math.max(1, Number(event.day) || 1)
+  );
+}
+
+function eventInMonth(event, year, month) {
+  const today = new Date();
+  const date = eventDate(event, today.getFullYear(), today.getMonth());
+  return date.getFullYear() === year && date.getMonth() === month;
+}
+
+function createDatedEvent(base, date) {
+  return {
+    ...base,
+    day: date.getDate(),
+    month: date.getMonth(),
+    year: date.getFullYear(),
+  };
+}
 
 export const Calendar = () => {
   const { state, actions } = useApp();
@@ -16,6 +40,7 @@ export const Calendar = () => {
   const [newEvent, setNewEvent] = useState({ title: '', day: now.getDate(), color: 'amber', time: '12:00' });
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const firstDayOfWeek = new Date(currentYear, currentMonth, 1).getDay();
@@ -23,18 +48,34 @@ export const Calendar = () => {
   const today = now.getDate();
   const isCurrentMonth = now.getMonth() === currentMonth && now.getFullYear() === currentYear;
 
-  const monthEvents = useMemo(() => events.filter(e => e.day >= 1 && e.day <= daysInMonth), [events, daysInMonth]);
+  const monthEvents = useMemo(
+    () => events.filter(e => e.day >= 1 && e.day <= daysInMonth && eventInMonth(e, currentYear, currentMonth)),
+    [events, daysInMonth, currentMonth, currentYear]
+  );
 
   const days = Array.from({ length: Math.ceil((daysInMonth + startOffset) / 7) * 7 }, (_, i) => i - startOffset + 1);
 
   const weekEvents = useMemo(() => {
-    const todayEv = events.filter(e => e.day >= today && e.day <= today + 7);
-    return todayEv.slice(0, 14);
-  }, [events, today]);
+    const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = new Date(todayDate);
+    end.setDate(todayDate.getDate() + 7);
+    return events
+      .map(e => ({ ...e, _date: eventDate(e, now.getFullYear(), now.getMonth()) }))
+      .filter(e => e._date >= todayDate && e._date <= end)
+      .sort((a, b) => a._date - b._date || String(a.time || '').localeCompare(String(b.time || '')))
+      .slice(0, 14);
+  }, [events, now]);
 
   const addEvent = () => {
     if (!newEvent.title.trim()) return;
-    actions.addEvent({ ...newEvent, title: newEvent.title.trim() });
+    const day = Math.max(1, Math.min(daysInMonth, Number(newEvent.day) || today));
+    actions.addEvent({
+      ...newEvent,
+      title: newEvent.title.trim(),
+      day,
+      month: currentMonth,
+      year: currentYear,
+    });
     actions.addNotification({ text: `Event "${newEvent.title}" added`, kind: 'info' });
     setNewEvent({ title: '', day: today, color: 'amber', time: '12:00' });
     setShowAdd(false);
@@ -47,14 +88,22 @@ export const Calendar = () => {
 
   const saveEdit = () => {
     if (!editData.title?.trim()) return;
-    actions.updateEvent(editData);
+    const day = Math.max(1, Math.min(daysInMonth, Number(editData.day) || today));
+    const { _date, ...cleanEditData } = editData;
+    actions.updateEvent({
+      ...cleanEditData,
+      day,
+      month: cleanEditData.month ?? currentMonth,
+      year: cleanEditData.year ?? currentYear,
+    });
     setEditingId(null);
     setEditData({});
     actions.addNotification({ text: `Event updated`, kind: 'info' });
   };
 
   const deleteEvent = (id) => {
-    if (!window.confirm('Delete this event?')) return;
+    if (confirmDeleteId !== id) { setConfirmDeleteId(id); return; }
+    setConfirmDeleteId(null);
     actions.deleteEvent(id);
     actions.addNotification({ text: `Event deleted`, kind: 'info' });
     if (editingId === id) { setEditingId(null); setEditData({}); }
@@ -62,13 +111,18 @@ export const Calendar = () => {
 
   const autoFill = () => {
     const existing = monthEvents.length;
-    actions.addEvent({ title: 'Focus block', day: today + 1, color: 'orange', time: '09:00' });
-    actions.addEvent({ title: 'Deep work', day: today + 2, color: 'amber', time: '10:00' });
-    actions.addEvent({ title: 'Review', day: today + 3, color: 'coral', time: '14:00' });
+    [1, 2, 3].forEach((offset, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+      const templates = [
+        { title: 'Focus block', color: 'orange', time: '09:00' },
+        { title: 'Deep work', color: 'amber', time: '10:00' },
+        { title: 'Review', color: 'coral', time: '14:00' },
+      ];
+      actions.addEvent(createDatedEvent(templates[index], date));
+    });
     actions.addNotification({ text: `Auto-filled week with 3 new blocks (had ${existing} existing)`, kind: 'info' });
   };
 
-  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const monthName = months[currentMonth];
 
   return (
@@ -90,8 +144,8 @@ export const Calendar = () => {
               style={{ all: "unset", fontSize: 16, fontFamily: "var(--font-display)", color: "var(--ink-1)", width: "100%" }}
             />
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <input type="number" min={1} max={31} value={newEvent.day}
-                onChange={(e) => setNewEvent({ ...newEvent, day: parseInt(e.target.value) || today })}
+              <input type="number" min={1} max={daysInMonth} value={newEvent.day}
+                onChange={(e) => setNewEvent({ ...newEvent, day: parseInt(e.target.value, 10) || today })}
                 style={{ width: 60, padding: "4px 10px", borderRadius: 8, fontSize: 11, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}
               />
               <input type="time" value={newEvent.time}
@@ -105,6 +159,39 @@ export const Calendar = () => {
               <div style={{ flex: 1 }} />
               <PaperButton small onClick={() => setShowAdd(false)}>Cancel</PaperButton>
               <PaperButton small primary onClick={addEvent}>Add event</PaperButton>
+            </div>
+          </div>
+        </GlassCard>
+      )}
+
+      {editingId && (
+        <GlassCard style={{ marginBottom: 16, padding: 0 }}>
+          <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+            <input autoFocus placeholder="Event title…" value={editData.title || ''}
+              onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') { setEditingId(null); setEditData({}); } }}
+              style={{ all: "unset", fontSize: 16, fontFamily: "var(--font-display)", color: "var(--ink-1)", width: "100%" }}
+            />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input type="number" min={1} max={daysInMonth} value={editData.day || today}
+                onChange={(e) => setEditData({ ...editData, day: parseInt(e.target.value, 10) || today })}
+                style={{ width: 60, padding: "4px 10px", borderRadius: 8, fontSize: 11, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}
+              />
+              <input type="time" value={editData.time || '12:00'}
+                onChange={(e) => setEditData({ ...editData, time: e.target.value })}
+                style={{ padding: "4px 10px", borderRadius: 8, fontSize: 11, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}
+              />
+              <select value={editData.color || 'amber'} onChange={(e) => setEditData({ ...editData, color: e.target.value })}
+                style={{ padding: "4px 10px", borderRadius: 8, fontSize: 11, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}>
+                {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <div style={{ flex: 1 }} />
+              <PaperButton small onClick={() => { setEditingId(null); setEditData({}); setConfirmDeleteId(null); }}>Cancel</PaperButton>
+              {confirmDeleteId === editingId
+                ? <><PaperButton small accent onClick={() => deleteEvent(editingId)}>Confirm delete</PaperButton><PaperButton small onClick={() => setConfirmDeleteId(null)}>✕</PaperButton></>
+                : <PaperButton small onClick={() => deleteEvent(editingId)}>Delete</PaperButton>
+              }
+              <PaperButton small primary onClick={saveEdit}>Save event</PaperButton>
             </div>
           </div>
         </GlassCard>
@@ -130,8 +217,8 @@ export const Calendar = () => {
                   padding: "10px 0", borderBottom: i < weekEvents.length - 1 ? "0.5px solid var(--ink-line)" : "none",
                 }}>
                   <div style={{ textAlign: "right" }}>
-                    <div className="t-num" style={{ fontSize: 22, lineHeight: 1, color: "var(--ink-1)" }}>{e.day}</div>
-                    <div className="t-mono" style={{ fontSize: 9.5, color: "var(--ink-3)" }}>{months[currentMonth].slice(0, 3)}</div>
+                    <div className="t-num" style={{ fontSize: 22, lineHeight: 1, color: "var(--ink-1)" }}>{e._date?.getDate?.() || e.day}</div>
+                    <div className="t-mono" style={{ fontSize: 9.5, color: "var(--ink-3)" }}>{months[e._date?.getMonth?.() ?? currentMonth].slice(0, 3)}</div>
                   </div>
                   <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                     <span style={{ width: 4, height: 28, background: c, borderRadius: 2 }}/>
@@ -141,7 +228,10 @@ export const Calendar = () => {
                     </div>
                   </div>
                   <button onClick={() => startEdit(e)} style={{ fontSize: 10, color: "var(--ink-3)", padding: "2px 6px" }}>Edit</button>
-                  <button onClick={() => deleteEvent(e.id)} style={{ fontSize: 10, color: "var(--ink-4)", padding: "2px 6px" }}>✕</button>
+                  {confirmDeleteId === e.id
+                    ? <><button onClick={() => deleteEvent(e.id)} style={{ fontSize: 10, color: "var(--accent-coral)", fontWeight: 600, padding: "2px 6px" }}>Delete?</button><button onClick={() => setConfirmDeleteId(null)} style={{ fontSize: 10, color: "var(--ink-4)", padding: "2px 6px" }}>✕</button></>
+                    : <button onClick={() => deleteEvent(e.id)} style={{ fontSize: 10, color: "var(--ink-4)", padding: "2px 6px" }}>✕</button>
+                  }
                 </div>
               );
             }) : (
@@ -163,7 +253,7 @@ export const Calendar = () => {
             "Friday is overloaded. Sat is empty. I can rebalance — keep one focus block on Sat AM?"
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-            <PaperButton small>Keep Sat free</PaperButton>
+            <PaperButton small onClick={() => actions.addNotification({ text: 'Kept Saturday free', kind: 'info' })}>Keep Sat free</PaperButton>
             <PaperButton small primary onClick={autoFill}>Rebalance</PaperButton>
           </div>
           <div className="hair" style={{ margin: "16px 0" }}/>
@@ -182,7 +272,6 @@ export const Calendar = () => {
 };
 
 const MonthView = ({ days, daysInMonth, isCurrentMonth, today, monthEvents, currentMonth, currentYear, onPrev, onNext, editingId, editData, onStartEdit, onEditChange, onSaveEdit, onDelete }) => {
-  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   return (
     <GlassCard padding={20}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>

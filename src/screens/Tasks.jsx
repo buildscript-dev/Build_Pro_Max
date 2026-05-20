@@ -26,6 +26,7 @@ export const Tasks = () => {
   const [newTask, setNewTask] = useState({ title: '', project: 'General', priority: 'P2', due: 'Today', recurring: null });
   const [dragOverId, setDragOverId] = useState(null);
   const [expandedSubtasks, setExpandedSubtasks] = useState({});
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const tasks = state.tasks || [];
 
@@ -91,7 +92,8 @@ export const Tasks = () => {
   };
 
   const deleteTask = (id, title) => {
-    if (!window.confirm(`Delete "${title}"?`)) return;
+    if (confirmDeleteId !== id) { setConfirmDeleteId(id); return; }
+    setConfirmDeleteId(null);
     actions.deleteTask(id);
     actions.addNotification({ text: `Task "${title}" deleted`, kind: 'info' });
     if (editingId === id) { setEditingId(null); setEditData({}); }
@@ -153,18 +155,24 @@ export const Tasks = () => {
 
   const killSnoozer = () => {
     const snoozed = tasks.filter(t => t.status !== 'done' && /past/i.test(t.due));
-    if (snoozed.length > 0) {
-      snoozed.forEach(t => actions.deleteTask(t.id));
-      actions.addNotification({ text: `Killed ${snoozed.length} snoozed task(s)`, kind: 'info' });
-    }
+    if (snoozed.length === 0) return;
+    if (confirmDeleteId !== 'bulk-overdue') { setConfirmDeleteId('bulk-overdue'); return; }
+    setConfirmDeleteId(null);
+    snoozed.forEach(t => actions.deleteTask(t.id));
+    actions.addNotification({ text: `Killed ${snoozed.length} snoozed task(s)`, kind: 'info' });
   };
 
   const replanRecoverables = () => {
     const overdue = tasks.filter(t => t.status !== 'done' && /past/i.test(t.due));
-    overdue.forEach(t => {
-      const newDue = 'Tomorrow';
-      actions.updateTask({ ...t, due: newDue });
+    if (overdue.length === 0) return;
+    // Batch update: create updated tasks array and dispatch once
+    const updatedTasks = tasks.map(t => {
+      if (overdue.includes(t)) {
+        return { ...t, due: 'Tomorrow' };
+      }
+      return t;
     });
+    actions.reorderTasks(updatedTasks);
     actions.addNotification({ text: `Replanned ${overdue.length} task(s) to tomorrow`, kind: 'info' });
   };
 
@@ -256,6 +264,8 @@ export const Tasks = () => {
                   onAddSubtask={addSubtask}
                   isExpanded={!!expandedSubtasks[t.id]}
                   onToggleExpand={() => toggleExpand(t.id)}
+                  isConfirmingDelete={confirmDeleteId === t.id}
+                  onCancelDelete={() => setConfirmDeleteId(null)}
                 />
               ))}
             </div>
@@ -287,7 +297,10 @@ export const Tasks = () => {
               </span>
             ) : 'AI analyze'}</PaperButton>
             <PaperButton small onClick={() => setFilter('today')}>Show today</PaperButton>
-            <PaperButton small accent onClick={killSnoozer}>Kill snoozers ({getSnoozedCount()})</PaperButton>
+            {confirmDeleteId === 'bulk-overdue'
+              ? <><PaperButton small accent onClick={killSnoozer}>Confirm delete {getSnoozedCount()}</PaperButton><PaperButton small onClick={() => setConfirmDeleteId(null)}>Cancel</PaperButton></>
+              : <PaperButton small accent onClick={killSnoozer}>Kill snoozers ({getSnoozedCount()})</PaperButton>
+            }
             <PaperButton small primary onClick={replanRecoverables}>Replan overdue</PaperButton>
           </div>
         </GlassCard>
@@ -296,7 +309,7 @@ export const Tasks = () => {
   );
 };
 
-const TaskRow = ({ t, editingId, editData, onStartEdit, onEditChange, onSaveEdit, onCancelEdit, onDelete, onToggle, onDragStart, onDragOver, onDrop, isDragOver, onToggleSubtask, onAddSubtask, isExpanded, onToggleExpand }) => {
+const TaskRow = ({ t, editingId, editData, onStartEdit, onEditChange, onSaveEdit, onCancelEdit, onDelete, onToggle, onDragStart, onDragOver, onDrop, isDragOver, onToggleSubtask, onAddSubtask, isExpanded, onToggleExpand, isConfirmingDelete, onCancelDelete }) => {
   const p = { P0: "#e7402e", P1: "#f06b1c", P2: "#f5a524", P3: "#b3a890" }[t.priority];
   const isEditing = editingId === t.id;
 
@@ -337,7 +350,10 @@ const TaskRow = ({ t, editingId, editData, onStartEdit, onEditChange, onSaveEdit
           <div style={{ flex: 1 }} />
           <button onClick={onCancelEdit} style={{ fontSize: 11, color: "var(--ink-3)", padding: "2px 6px" }}>Cancel</button>
           <button onClick={onSaveEdit} style={{ fontSize: 11, color: "var(--accent-orange)", fontWeight: 600, padding: "2px 6px" }}>Save</button>
-          <button onClick={() => onDelete(t.id)} style={{ fontSize: 11, color: "var(--accent-coral)", padding: "2px 6px" }}>Delete</button>
+          {isConfirmingDelete
+            ? <><button onClick={() => onDelete(t.id)} style={{ fontSize: 11, color: "#fff", background: "var(--accent-coral)", padding: "2px 8px", borderRadius: 4 }}>Confirm delete</button><button onClick={onCancelDelete} style={{ fontSize: 11, color: "var(--ink-3)", padding: "2px 6px" }}>Cancel</button></>
+            : <button onClick={() => onDelete(t.id)} style={{ fontSize: 11, color: "var(--accent-coral)", padding: "2px 6px" }}>Delete</button>
+          }
         </div>
       </div>
     );
@@ -378,7 +394,10 @@ const TaskRow = ({ t, editingId, editData, onStartEdit, onEditChange, onSaveEdit
           <span>·</span><span>{t.project}</span>
           <div style={{ flex: 1 }} />
           <button onClick={() => onStartEdit(t)} style={{ fontSize: 10, color: "var(--ink-3)" }}>Edit</button>
-          <button onClick={() => onDelete(t.id)} style={{ fontSize: 10, color: "var(--ink-4)" }}>✕</button>
+          {isConfirmingDelete
+            ? <><button onClick={() => onDelete(t.id)} style={{ fontSize: 10, color: "var(--accent-coral)", fontWeight: 600 }}>Delete?</button><button onClick={onCancelDelete} style={{ fontSize: 10, color: "var(--ink-4)" }}>✕</button></>
+            : <button onClick={() => onDelete(t.id)} style={{ fontSize: 10, color: "var(--ink-4)" }}>✕</button>
+          }
         </div>
         {t.recurring && (
           <div style={{

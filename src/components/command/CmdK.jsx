@@ -79,7 +79,11 @@ export const CmdK = ({ open, onClose, onNavigate }) => {
   useEffect(() => {
     if (open) {
       setQ(""); setSel(0); setAnswer(null); setBusy(false);
-      setTimeout(() => inputRef.current?.focus(), 40);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          inputRef.current?.focus();
+        });
+      });
     }
   }, [open]);
 

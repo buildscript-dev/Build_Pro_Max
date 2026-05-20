@@ -16,6 +16,11 @@ export const Settings = ({ onShowAuth, onLogout: _onLogout }) => {
   const [activeSection, setActiveSection] = useState(authUser ? 'Appearance' : 'Account');
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileData, setProfileData] = useState({ ...user });
+  
+  // Sync profileData when state.user changes (e.g., from auth sync)
+  useEffect(() => {
+    setProfileData(prev => ({ ...prev, ...user }));
+  }, [user]);
   const [apiKey, setApiKey] = useState(() => { try { return localStorage.getItem('openrouter_api_key') || ''; } catch { return ''; } });
   const [gmailConnected, setGmailConnected] = useState(isGmailConnected());
   const [gmailEmail, setGmailEmail] = useState(getGmailEmail());
@@ -108,7 +113,21 @@ export const Settings = ({ onShowAuth, onLogout: _onLogout }) => {
     if (window.confirm('Are you sure? This will permanently delete your account and all local data.')) {
       await deleteAccount(authUser?.email || '');
       // Only clear app-specific keys, not all localStorage
-      const appKeys = ['build_pro_max_1_state', 'auth_session', 'auth_users', 'openrouter_api_key', 'ai_personality', 'gmail_token', 'gmail_email'];
+      const appKeys = [
+        'build_pro_max_1_state',
+        'auth_session',
+        'auth_users',
+        'openrouter_api_key',
+        'ai_personality',
+        'gmail_access_token',
+        'gmail_client_id',
+        'gmail_api_key',
+        'gmail_email',
+        'notion_access_token',
+        'notion_email',
+        'notion_workspace',
+        'onboarding_complete',
+      ];
       appKeys.forEach(key => localStorage.removeItem(key));
       window.location.reload();
     }
@@ -150,15 +169,21 @@ export const Settings = ({ onShowAuth, onLogout: _onLogout }) => {
       <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16, alignItems: "start" }}>
         <GlassCard padding={0}>
           {NAV_ITEMS.map((s, i) => (
-            <div key={s} onClick={() => setActiveSection(s)} style={{
-              padding: "12px 18px", fontSize: 13.5,
-              background: activeSection === s ? "rgba(245,165,36,.10)" : "transparent",
-              color: activeSection === s ? "var(--accent-orange)" : "var(--ink-2)",
-              fontWeight: activeSection === s ? 600 : 500,
-              borderBottom: i < NAV_ITEMS.length - 1 ? "0.5px solid var(--ink-line)" : "none",
-              boxShadow: activeSection === s ? "inset 3px 0 0 var(--accent-orange)" : "none",
-              cursor: "pointer",
-            }}>{s}</div>
+            <button key={s} onClick={() => setActiveSection(s)}
+              aria-current={activeSection === s ? "page" : undefined}
+              style={{
+                display: "block", width: "100%", textAlign: "left",
+                padding: "12px 18px", fontSize: 13.5,
+                background: activeSection === s ? "rgba(245,165,36,.10)" : "transparent",
+                color: activeSection === s ? "var(--accent-orange)" : "var(--ink-2)",
+                fontWeight: activeSection === s ? 600 : 500,
+                borderBottom: i < NAV_ITEMS.length - 1 ? "0.5px solid var(--ink-line)" : "none",
+                boxShadow: activeSection === s ? "inset 3px 0 0 var(--accent-orange)" : "none",
+                transition: "background 120ms ease",
+              }}
+              onMouseEnter={(e) => { if (activeSection !== s) e.currentTarget.style.background = "rgba(26,20,16,.03)"; }}
+              onMouseLeave={(e) => { if (activeSection !== s) e.currentTarget.style.background = "transparent"; }}
+            >{s}</button>
           ))}
         </GlassCard>
 

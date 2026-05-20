@@ -106,7 +106,7 @@ export const AiChat = () => {
         actions.addNotification({ text: action.text, kind: action.kind || 'info' });
         break;
       case 'clearChat':
-        // Clear chat messages without full page reload
+        actions.clearChat();
         actions.addNotification({ text: 'Conversation cleared', kind: 'info' });
         break;
       default:
@@ -181,8 +181,24 @@ export const AiChat = () => {
   const webInputRef = useRef(null);
 
   const handleAction = (action) => {
+    const nav = window.__opencode?.onNavigate;
+    const navMap = {
+      'Show calendar': 'calendar',
+      'Show tasks': 'tasks',
+      'Show contacts': 'contacts',
+      'Show notes': 'notes',
+      'Show files': 'files',
+      'Open memo': 'files',
+    };
     if (action === 'Summarize website') {
       webInputRef.current?.focus();
+    } else if (action === 'Send now') {
+      actions.addNotification({ text: 'Bessemer follow-up marked as sent', kind: 'info' });
+      nav?.('notes');
+    } else if (action === 'Push 30m') {
+      actions.addNotification({ text: 'Follow-up pushed to 15:00', kind: 'info' });
+    } else if (navMap[action]) {
+      nav?.(navMap[action]);
     } else {
       setDraft(action);
     }
@@ -293,12 +309,15 @@ export const AiChat = () => {
                 "How warm are my contacts?",
                 "Any reminders today?",
               ].map(s => (
-                <div key={s} onClick={() => setDraft(s)} style={{
+                <button key={s} type="button" onClick={() => setDraft(s)} style={{
+                  display: "block", width: "100%", textAlign: "left",
                   padding: "9px 12px", borderRadius: 9,
                   background: "rgba(26,20,16,.04)", fontSize: 12.5, color: "var(--ink-2)",
-                  cursor: "pointer",
                   transition: "background 120ms",
-                }}>{s}</div>
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(245,165,36,.08)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(26,20,16,.04)"; }}
+                >{s}</button>
               ))}
             </div>
           </GlassCard>

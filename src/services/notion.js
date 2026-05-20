@@ -21,7 +21,7 @@ export function getNotionWorkspace() {
   } catch { return ''; }
 }
 
-async function notionFetch(path, options = {}) {
+async function notionFetch(path, options = {}, retryCount = 0) {
   const token = localStorage.getItem('notion_access_token');
   if (!token) throw new Error('Notion not connected');
 
@@ -44,9 +44,10 @@ async function notionFetch(path, options = {}) {
       throw new Error('Notion session expired. Reconnect in Settings.');
     }
     if (res.status === 429) {
+      if (retryCount >= 3) throw new Error('Notion rate limit exceeded after 3 retries.');
       const retryAfter = parseInt(res.headers.get('Retry-After') || '5', 10);
       await new Promise(r => setTimeout(r, retryAfter * 1000));
-      return notionFetch(path, options);
+      return notionFetch(path, options, retryCount + 1);
     }
     throw new Error(msg);
   }

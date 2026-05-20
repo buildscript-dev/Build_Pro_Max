@@ -84,14 +84,6 @@ html, body, #root {
   margin: 0;
 }
 
-html.lenis, html.lenis body {
-  height: auto;
-}
-
-.lenis.lenis-smooth {
-  scroll-behavior: auto !important;
-}
-
 body {
   font-family: var(--font-sans);
   color: var(--ink-1);
@@ -441,13 +433,30 @@ body.canvas-mono .glass {
 .t-num { font-family: var(--font-display); font-variant-numeric: tabular-nums; font-weight: 400; }
 
 /* ─── Reset utilities ──────────────────────────────────────── */
-button { all: unset; cursor: default; display: inline-flex; align-items: center; }
+button { all: unset; cursor: pointer; display: inline-flex; align-items: center; }
 button:focus-visible { outline: 2px solid var(--accent-orange); outline-offset: 2px; border-radius: 4px; }
+button:disabled { cursor: not-allowed; opacity: 0.5; }
+button:not(:disabled):active { transform: scale(0.97); }
 hr { border: 0; height: 1px; background: var(--ink-line); margin: 0; }
 ::selection { background: rgba(245, 165, 36, 0.30); color: var(--ink-1); }
 
+/* Input focus ring — replaces native ring removed by all:unset inputs */
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent-orange);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
 /* ─── Scrollbar ────────────────────────────────────────────── */
-.scroll { overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(26,20,16,.18) transparent; }
+.scroll {
+  overflow: auto;
+  min-height: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26,20,16,.18) transparent;
+}
 .scroll::-webkit-scrollbar { width: 8px; height: 8px; }
 .scroll::-webkit-scrollbar-thumb { background: rgba(26,20,16,.18); border-radius: 4px; }
 .scroll::-webkit-scrollbar-track { background: transparent; }
@@ -527,7 +536,7 @@ hr { border: 0; height: 1px; background: var(--ink-line); margin: 0; }
 @keyframes pop-in  { from { opacity: 0; transform: translateY(-6px) scale(.985) } to { opacity: 1; transform: none } }
 
 /* ─── Performance: reduce ambient orb blur overhead ────────── */
-.ambient .orb { filter: blur(60px); }  /* was 80px — 25% less GPU cost */
+.ambient .orb { filter: blur(40px); }  /* unified blur value — removed duplicate 60px override */
 
 /* ─── Focus Modes ────────────────────────────────────────── */
 body.focus-execution .scroll {
@@ -541,7 +550,7 @@ body.focus-learner .magnetic-btn {
   transition: transform 200ms var(--ease-snap), box-shadow 200ms ease !important;
 }
 body.focus-learner .magnetic-btn:hover {
-  box-shadow: 0 0 0 2px var(--info)33, 0 4px 12px -2px rgba(42,111,219,.2) !important;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--info) 20%, transparent), 0 4px 12px -2px rgba(42,111,219,.2) !important;
 }
 body.focus-active .dock-awards {
   opacity: 0.92;

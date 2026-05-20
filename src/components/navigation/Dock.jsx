@@ -10,11 +10,26 @@ function mag(distance, max = 1.5, falloff = 110) {
 
 export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, onOpenFocus, focusMode = "off", recentActions = [], hasNotifications = false }) => {
   const [mouseX, setMouseX] = useState(null);
+  const [itemRects, setItemRects] = useState({});
   const ref = useRef(null);
   const itemRefs = useRef({});
 
   if (variant === "rail") return <SideRail active={active} onSelect={onSelect} onOpenCmdK={onOpenCmdK} onOpenFocus={onOpenFocus} focusMode={focusMode} hasNotifications={hasNotifications} />;
   if (variant === "top") return null;
+
+  // Measure item positions only when mouse enters/leaves dock (not on every render)
+  useEffect(() => {
+    if (mouseX === null) return;
+    const rects = {};
+    DOCK_ITEMS.forEach(item => {
+      const el = itemRefs.current[item.id];
+      if (el) {
+        const r = el.getBoundingClientRect();
+        rects[item.id] = r.left + r.width / 2;
+      }
+    });
+    setItemRects(rects);
+  }, [mouseX]);
 
   return (
     <div
@@ -46,10 +61,8 @@ export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, onOpenFoc
       {DOCK_ITEMS.map((item, i) => {
         const isActive = active === item.id;
         let scale = 1;
-        if (mouseX !== null && itemRefs.current[item.id]) {
-          const r = itemRefs.current[item.id].getBoundingClientRect();
-          const cx = r.left + r.width / 2;
-          scale = mag(Math.abs(mouseX - cx));
+        if (mouseX !== null && itemRects[item.id]) {
+          scale = mag(Math.abs(mouseX - itemRects[item.id]));
         }
         const base = 44;
         const lift = (scale - 1) * 18;
@@ -195,6 +208,19 @@ export const TopBar = ({ user, today, onOpenCmdK, variant = "dock", active, onSe
   const showInlineNav = variant === "top";
   const [showNotif, setShowNotif] = useState(false);
   const [lastSync, setLastSync] = useState(() => Date.now());
+  const notifRef = useRef(null);
+
+  // Close notification panel when clicking outside
+  useEffect(() => {
+    if (!showNotif) return;
+    const handler = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setShowNotif(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showNotif]);
 
   // Update sync timestamp when state changes in other tabs
   useEffect(() => {
@@ -291,11 +317,12 @@ export const TopBar = ({ user, today, onOpenCmdK, variant = "dock", active, onSe
         <span style={{ fontSize: 10, color: 'var(--ink-3)', fontWeight: 500 }}>{syncLabel}</span>
       </div>
 
-      <div style={{ position: "relative" }}>
+      <div ref={notifRef} style={{ position: "relative" }}>
         <button
           onClick={() => setShowNotif(!showNotif)}
           title="Notifications"
-          aria-label="Toggle notifications"
+          aria-label={`${hasNotifications ? 'Unread notifications' : 'Notifications'} — toggle panel`}
+          aria-expanded={showNotif}
           style={{ width: 36, height: 36, borderRadius: 999, position: "relative" }}>
           <Icon name="bell" size={16} />
           {hasNotifications && (

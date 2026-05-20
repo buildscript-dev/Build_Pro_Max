@@ -1,4 +1,4 @@
-import React, { useEffect, useState, lazy, Suspense, useRef } from 'react';
+import React, { useEffect, useState, lazy, Suspense, useRef, useCallback, useMemo } from 'react';
 import { useApp } from './store/AppContext';
 import { CmdK } from './components/command/CmdK';
 import { Dock, TopBar } from './components/navigation/Dock';
@@ -98,13 +98,13 @@ export default function App() {
     }
   }, [authUser]);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     clearSession();
     onLogout();
     setShowAuth(true);
     setShowOnboarding(false);
     setScreen('dashboard');
-  };
+  }, [onLogout]);
 
   const handleAuth = (user) => {
     setAuthUser(user);
@@ -112,6 +112,9 @@ export default function App() {
   };
 
   const handleOnboardingComplete = () => {
+    try {
+      localStorage.setItem('onboarding_complete', 'true');
+    } catch { /* ignore storage failures */ }
     setShowOnboarding(false);
   };
 
@@ -185,19 +188,30 @@ export default function App() {
     document.title = labels[screen] || 'Build_PRO_MAX_1';
   }, [screen]);
 
-  // Detect scroll for top bar glass upgrade
+  // Detect scroll inside the active screen for top bar glass upgrade.
   useEffect(() => {
     const el = contentRef.current;
     if (!el) return;
-    const onScroll = () => setTopBarScrolled(el.scrollTop > 20);
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
+    const onScroll = (event) => {
+      const target = event.target;
+      if (target instanceof Element && target.classList.contains('scroll')) {
+        setTopBarScrolled(target.scrollTop > 20);
+      }
+    };
+    el.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    return () => el.removeEventListener('scroll', onScroll, { capture: true });
   }, [screen]);
 
   const hasNotifications = state.notifications?.some(n => !n.read);
 
   const isAuthConnected = !!authUser;
-  const SCREENS = {
+
+  // Stable Settings wrapper — defined outside render to prevent unmount/remount
+  const SettingsScreen = useCallback((props) => (
+    <Settings {...props} onShowAuth={() => setShowAuth(true)} onLogout={handleLogout} />
+  ), [handleLogout]);
+
+  const SCREENS = useMemo(() => ({
     dashboard: Dashboard,
     planner: Planner,
     notes: Notes,
@@ -206,9 +220,9 @@ export default function App() {
     contacts: Contacts,
     files: Files,
     chat: AiChat,
-    settings: (props) => <Settings {...props} onShowAuth={() => setShowAuth(true)} onLogout={handleLogout} />,
+    settings: SettingsScreen,
     onboarding: Onboarding,
-  };
+  }), [SettingsScreen]);
 
   return (
     <>
@@ -226,14 +240,13 @@ export default function App() {
       <div
         ref={contentRef}
         data-screen-label={`Screen · ${screen}`}
-        className="scroll"
         style={{
           position: 'fixed',
           inset: 0,
           opacity: bootDone ? 1 : 0,
           transform: bootDone ? 'scale(1)' : 'scale(1.02)',
           transition: 'opacity 600ms ease-out, transform 600ms var(--ease-glass)',
-          overflowY: 'auto',
+          overflow: 'hidden',
         }}
       >
         <Suspense fallback={<div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--ink-3)' }}>Loading…</div>}>

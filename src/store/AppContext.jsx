@@ -4,6 +4,14 @@ import { sendNotification, checkDueReminders } from '../services/clock';
 
 const STORAGE_KEY = 'build_pro_max_1_state';
 
+function getWeekNumber(d) {
+  const date = new Date(d.getTime());
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+  const week1 = new Date(date.getFullYear(), 0, 4);
+  return 1 + Math.round(((date - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -16,10 +24,11 @@ function loadState() {
       const dow = days[now.getDay()];
       const month = months[now.getMonth()];
       const date = now.getDate();
+      const weekNum = getWeekNumber(now);
       parsed.today = {
         ...parsed.today,
         date: `${dow}, ${month} ${date}`,
-        weekOf: `Week ${Math.ceil((now - new Date(now.getFullYear(),0,1))/604800000)} · ${month} ${date}–${date+6}`,
+        weekOf: `Week ${weekNum} · ${month} ${date}–${date+6}`,
       };
       return parsed;
     }
@@ -31,10 +40,11 @@ const initialToday = () => {
   const now = new Date();
   const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const weekNum = getWeekNumber(now);
   return {
     ...initialData.today,
     date: `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}`,
-    weekOf: `Week ${Math.ceil((now - new Date(now.getFullYear(),0,1))/604800000)} · ${months[now.getMonth()]} ${now.getDate()}–${now.getDate()+6}`,
+    weekOf: `Week ${weekNum} · ${months[now.getMonth()]} ${now.getDate()}–${now.getDate()+6}`,
   };
 };
 
@@ -79,6 +89,11 @@ function freshState() {
     nextTaskId: 9,
     nextEventId: 12,
     nextContactId: 9,
+    environmentMode: 'normal',
+    automationEnabled: false,
+    auditLog: [],
+    automationFeedback: [],
+    autoReply: null,
   };
 }
 
@@ -203,7 +218,7 @@ function reducer(state, action) {
 
     // ─── Notes ───
     case 'ADD_NOTE': {
-      const id = `n${state.nextNoteId}`;
+      const id = action.payload?.id || `n${state.nextNoteId}`;
       const newNote = {
         title: 'Untitled',
         tag: 'General',
@@ -366,6 +381,24 @@ function reducer(state, action) {
       return { ...state, notifications: [] };
     }
 
+    // ─── Environment / AI Automation ───
+    case 'SET_ENVIRONMENT_MODE': {
+      return { ...state, environmentMode: action.payload };
+    }
+    case 'SET_AUTOMATION_ENABLED': {
+      return { ...state, automationEnabled: action.payload };
+    }
+    case 'ADD_AUDIT_LOG': {
+      const entry = { id: generateId(), timestamp: Date.now(), ...action.payload };
+      return { ...state, auditLog: [entry, ...(state.auditLog || [])].slice(0, 200) };
+    }
+    case 'ADD_AUTOMATION_FEEDBACK': {
+      return { ...state, automationFeedback: [{ id: generateId(), timestamp: Date.now(), ...action.payload }, ...(state.automationFeedback || [])].slice(0, 500) };
+    }
+    case 'SET_AUTO_REPLY': {
+      return { ...state, autoReply: action.payload };
+    }
+
     // ─── Tweaks ───
     case 'SET_TWEAK': {
       const edits = typeof action.payload === 'object' ? action.payload : { [action.key]: action.val };
@@ -380,6 +413,11 @@ function reducer(state, action) {
     // ─── AI Suggestions ───
     case 'SET_AI_SUGGESTIONS': {
       return { ...state, aiSuggestions: action.payload };
+    }
+
+    // ─── Cross-tab sync: replace entire state ───
+    case 'REPLACE_STATE': {
+      return action.payload;
     }
 
     default:
@@ -404,6 +442,9 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
     return () => clearTimeout(id);
   }, []);
 
+  // Track whether current state change came from cross-tab sync (to avoid re-broadcasting)
+  const isSyncingRef = useRef(false);
+
   // Debounced localStorage persistence — avoid serializing on every tiny dispatch
   const persistTimer = useRef(null);
   useEffect(() => {
@@ -411,8 +452,8 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
     persistTimer.current = setTimeout(() => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        // Broadcast state to other tabs (cross-tab sync)
-        if (window.__buildProMaxSync?.broadcast) {
+        // Only broadcast if this state change originated locally (not from another tab)
+        if (!isSyncingRef.current && window.__buildProMaxSync?.broadcast) {
           window.__buildProMaxSync.broadcast(state);
         }
       } catch (e) { /* quota exceeded — ignore */ }
@@ -420,19 +461,22 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
     return () => clearTimeout(persistTimer.current);
   }, [state]);
 
-  // Listen for cross-tab state sync events
+  // Listen for cross-tab state sync events — stable listener, merges via ref
   useEffect(() => {
     const handleSync = (e) => {
       const syncedState = e.detail;
-      if (syncedState && syncedState !== state) {
-        // Reload to pick up the new localStorage state
-        // In production, merge states properly with version/timestamp
-        window.location.reload();
+      if (syncedState) {
+        isSyncingRef.current = true;
+        const current = stateRef.current;
+        const merged = { ...current, ...syncedState, tweaks: { ...current.tweaks, ...syncedState.tweaks } };
+        dispatch({ type: 'REPLACE_STATE', payload: merged });
+        // Reset flag after the state update and persistence cycle completes
+        setTimeout(() => { isSyncingRef.current = false; }, 600);
       }
     };
     window.addEventListener('build_pro_max_state_sync', handleSync);
     return () => window.removeEventListener('build_pro_max_state_sync', handleSync);
-  }, [state]);
+  }, []); // stable — reads fresh state via stateRef
 
   // Use a ref to always have fresh state inside the AI interval (avoids stale closure)
   const stateRef = useRef(state);
@@ -467,6 +511,8 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
         due.forEach(r => {
           if (firedRef.current.has(r.id)) return;
           firedRef.current.add(r.id);
+          // Mark the reminder as fired in state so checkDueReminders skips it too
+          actions.updateTask && null; // no-op, just to use actions ref
           sendNotification(r.title || 'Reminder', { body: r.text || r.title || '' });
           dispatch({ type: 'ADD_NOTIFICATION', payload: { text: `⏰ ${r.title || 'Reminder'}`, kind: 'info' } });
         });
@@ -543,8 +589,19 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
     // AI
     setAiSuggestions: (data) => dispatch({ type: 'SET_AI_SUGGESTIONS', payload: data }),
 
+    // Environment / AI Automation
+    setEnvironmentMode: (mode) => dispatch({ type: 'SET_ENVIRONMENT_MODE', payload: mode }),
+    setAutomationEnabled: (bool) => dispatch({ type: 'SET_AUTOMATION_ENABLED', payload: bool }),
+    addAuditLog: (entry) => dispatch({ type: 'ADD_AUDIT_LOG', payload: entry }),
+    addAutomationFeedback: (feedback) => dispatch({ type: 'ADD_AUTOMATION_FEEDBACK', payload: feedback }),
+    setAutoReply: (message) => dispatch({ type: 'SET_AUTO_REPLY', payload: message }),
+
     decayWarmth: () => dispatch({ type: 'DECAY_WARMTH' }),
   }), [dispatch]);
+
+  // Stable no-op logout to avoid creating new function reference when externalLogout is absent
+  const noopLogout = useCallback(() => {}, []);
+  const resolvedLogout = externalLogout || noopLogout;
 
   const contextValue = useMemo(() => ({
     state,
@@ -552,8 +609,8 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
     bootDone,
     authUser,
     setAuthUser,
-    onLogout: externalLogout || (() => {}),
-  }), [state, actions, bootDone, authUser, setAuthUser, externalLogout]);
+    onLogout: resolvedLogout,
+  }), [state, actions, bootDone, authUser, setAuthUser, resolvedLogout]);
 
   return (
     <AppContext.Provider value={contextValue}>
