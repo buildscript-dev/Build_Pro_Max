@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb } from '../components/ui/Icons';
 import { useApp } from '../store/AppContext';
 import { ScreenShell } from '../components/ui/ScreenShell';
+import { uploadFile, deleteFile } from '../services/supabaseDb';
 
 const FILE_KINDS = ['pdf', 'fig', 'sheet', 'img', 'audio'];
 const DEVICE_NAMES = ['MacBook Pro', 'iPhone 15', 'iPad Pro', 'Studio (Mac mini)'];
@@ -14,29 +15,74 @@ export const Files = () => {
   const [newFile, setNewFile] = useState({ name: '', from: DEVICE_NAMES[0], to: DEVICE_NAMES[1], size: '1 MB', kind: 'pdf' });
   const filesRef = useRef(files);
 
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
   // Keep ref in sync with latest files
   useEffect(() => { filesRef.current = files; }, [files]);
 
-  // Simulate progress for in-flight transfers — stable interval, reads from ref
+  // Simulate progress for in-flight transfers
   useEffect(() => {
     const iv = setInterval(() => {
       filesRef.current.forEach(f => {
-        if (f.progress < 100) {
+        if (f.progress < 90) {
           const inc = Math.random() * 15 + 2;
-          const next = Math.min(100, f.progress + inc);
-          actions.updateFileProgress(f.id || f.name, Math.round(next));
+          const next = Math.min(90, f.progress + inc);
+          actions.updateFileProgress(f.id, Math.round(next));
         }
       });
-    }, 2000);
+    }, 800);
     return () => clearInterval(iv);
   }, [actions]);
 
-  const addTransfer = () => {
-    if (!newFile.name.trim()) return;
-    actions.addFile({ ...newFile, name: newFile.name.trim(), progress: 0 });
-    actions.addNotification({ text: `Transfer started: "${newFile.name}"`, kind: 'info' });
-    setNewFile({ name: '', from: DEVICE_NAMES[0], to: DEVICE_NAMES[1], size: '1 MB', kind: 'pdf' });
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    setIsUploading(true);
+    const tempId = `temp_${Date.now()}`;
+    const ext = file.name.split('.').pop().toLowerCase();
+    let kind = 'img';
+    if (ext === 'pdf') kind = 'pdf';
+    else if (['mp3','wav','ogg'].includes(ext)) kind = 'audio';
+    else if (['xls','xlsx','csv'].includes(ext)) kind = 'sheet';
+    else if (['fig'].includes(ext)) kind = 'fig';
+
+    const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+
+    actions.addFile({ id: tempId, name: file.name, from: 'This device', to: 'Cloud', size: fileSizeMB, kind, progress: 0 });
+    actions.addNotification({ text: `Uploading: "${file.name}"`, kind: 'info' });
+    
+    // Upload to Supabase Storage
+    const result = await uploadFile(file, state.user.id);
+    
+    if (result.ok) {
+      actions.removeFile(tempId);
+      actions.addFile({
+        name: file.name,
+        url: result.url,
+        path: result.path,
+        from: 'This device',
+        to: 'Cloud',
+        size: fileSizeMB,
+        kind,
+        progress: 100
+      });
+      actions.addNotification({ text: `Upload complete!`, kind: 'success' });
+    } else {
+      actions.removeFile(tempId);
+      actions.addNotification({ text: `Upload failed: ${result.error}`, kind: 'error' });
+    }
+    
+    setIsUploading(false);
     setShowAdd(false);
+  };
+
+  const handleRemove = async (file) => {
+    actions.removeFile(file.id);
+    if (file.path) {
+      await deleteFile(file.path);
+    }
   };
 
   const attachToCalendar = () => {
@@ -73,29 +119,23 @@ export const Files = () => {
     >
       {showAdd && (
         <GlassCard style={{ marginBottom: 16, padding: 0 }}>
-          <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
-            <input autoFocus placeholder="File name…" value={newFile.name}
-              onChange={(e) => setNewFile({ ...newFile, name: e.target.value })}
-              onKeyDown={(e) => { if (e.key === 'Enter') addTransfer(); if (e.key === 'Escape') setShowAdd(false); }}
-              style={{ all: "unset", fontSize: 16, fontFamily: "var(--font-display)", color: "var(--ink-1)", width: "100%" }}
+          <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
+            <div style={{ fontSize: 14, color: "var(--ink-2)" }}>
+              {isUploading ? "Uploading to Supabase..." : "Select a file to upload to the Cloud"}
+            </div>
+            
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              style={{ display: 'none' }} 
+              onChange={handleFileSelect} 
             />
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <select value={newFile.kind} onChange={(e) => setNewFile({ ...newFile, kind: e.target.value })}
-                style={{ padding: "4px 10px", borderRadius: 8, fontSize: 11, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}>
-                {FILE_KINDS.map(k => <option key={k} value={k}>{k}</option>)}
-              </select>
-              <select value={newFile.from} onChange={(e) => setNewFile({ ...newFile, from: e.target.value })}
-                style={{ padding: "4px 10px", borderRadius: 8, fontSize: 11, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}>
-                {DEVICE_NAMES.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-              <Icon name="arrow" size={12} />
-              <select value={newFile.to} onChange={(e) => setNewFile({ ...newFile, to: e.target.value })}
-                style={{ padding: "4px 10px", borderRadius: 8, fontSize: 11, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}>
-                {DEVICE_NAMES.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-              <div style={{ flex: 1 }} />
-              <PaperButton small onClick={() => setShowAdd(false)}>Cancel</PaperButton>
-              <PaperButton small primary onClick={addTransfer} icon="arrow">Start transfer</PaperButton>
+            
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <PaperButton small onClick={() => setShowAdd(false)} disabled={isUploading}>Cancel</PaperButton>
+              <PaperButton small primary onClick={() => fileInputRef.current?.click()} disabled={isUploading} icon="arrow">
+                {isUploading ? "Uploading..." : "Choose File"}
+              </PaperButton>
             </div>
           </div>
         </GlassCard>
@@ -199,11 +239,11 @@ export const Files = () => {
                   )}
                 </div>
                 <span className="t-mono" style={{ fontSize: 11, color: "var(--ink-3)", textAlign: "right" }}>{f.progress}%</span>
-                <button onClick={() => actions.removeFile(f.id)} aria-label={`Remove ${f.name}`} style={{ fontSize: 10, color: "var(--ink-4)", padding: "2px 6px" }}>✕</button>
+                <button onClick={() => handleRemove(f)} aria-label={`Remove ${f.name}`} style={{ fontSize: 10, color: "var(--ink-4)", padding: "2px 6px" }}>✕</button>
               </div>
             ))}
             {files.length === 0 && (
-              <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "var(--ink-3)" }}>No transfers yet. Click "New transfer" to start.</div>
+              <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "var(--ink-3)" }}>No files uploaded yet. Click "New transfer" to upload to Supabase.</div>
             )}
           </div>
         </GlassCard>
