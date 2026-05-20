@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AiOrb, PaperButton } from '../components/ui/Icons';
-import { login, signup, loginWithGoogle, resetPassword } from '../store/auth';
+import { login, signup, loginWithGoogle, resetPassword } from '../store/auth.js';
 
 export const Auth = ({ onAuth }) => {
   const [mode, setMode] = useState('login');

@@ -453,6 +453,34 @@ function reducer(state, action) {
       };
     }
 
+    // ─── Realtime Synchronization ───
+    case 'REALTIME_CHANGE': {
+      const { table, eventType, newRecord, oldRecord } = action.payload;
+      
+      // Map supabase table names to state keys
+      let stateKey = table;
+      if (table === 'chat_messages') stateKey = 'chatMessages';
+      
+      if (!state[stateKey] || !Array.isArray(state[stateKey])) return state;
+
+      const currentList = state[stateKey];
+
+      if (eventType === 'INSERT') {
+        if (currentList.some(item => item.id === newRecord.id)) return state;
+        return { ...state, [stateKey]: [newRecord, ...currentList] };
+      }
+      
+      if (eventType === 'UPDATE') {
+        return { ...state, [stateKey]: currentList.map(item => item.id === newRecord.id ? newRecord : item) };
+      }
+
+      if (eventType === 'DELETE') {
+        return { ...state, [stateKey]: currentList.filter(item => item.id !== oldRecord.id) };
+      }
+
+      return state;
+    }
+
     default:
       return state;
   }
@@ -477,9 +505,19 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
 
   useEffect(() => {
     if (authUser && authUser.id) {
+      // 1. Hydrate full state initially
       fetchAllFromSupabase(authUser.id).then(results => {
         dispatch({ type: 'HYDRATE_SUPABASE', payload: results });
       }).catch(err => console.error("Supabase load failed", err));
+
+      // 2. Listen to real-time changes
+      const unsubscribe = subscribeToAll(authUser.id, (table, eventType, newRecord, oldRecord) => {
+        dispatch({ type: 'REALTIME_CHANGE', payload: { table, eventType, newRecord, oldRecord } });
+      });
+
+      return () => {
+        unsubscribe();
+      };
     }
   }, [authUser]);
 

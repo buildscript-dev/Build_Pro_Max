@@ -107,3 +107,27 @@ export async function listUserFiles(userId) {
     return { ok: false, error: err.message, files: [] };
   }
 }
+
+export function subscribeToAll(userId, onDatabaseChange) {
+  if (!userId) return () => {};
+  
+  const channel = supabase
+    .channel('all_tables_changes')
+    .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+      // payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE', table, new, old }
+      const record = payload.new || payload.old;
+      // Basic client-side check to ensure we only react to our own data
+      if (record && record.user_id === userId) {
+        onDatabaseChange(payload.table, payload.eventType, payload.new, payload.old);
+      }
+    })
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('Realtime Connected');
+      }
+    });
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
