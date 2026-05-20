@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { AppData as initialData } from '../data';
 import { sendNotification, checkDueReminders } from '../services/clock';
-import { fetchAllFromSupabase, syncToSupabase, deleteFromSupabase } from '../services/supabaseDb';
+import { fetchAllFromSupabase, syncToSupabase, deleteFromSupabase, subscribeToAll } from '../services/supabaseDb';
 
 const STORAGE_KEY = 'build_pro_max_1_state_v4';
 
