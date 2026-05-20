@@ -4,9 +4,18 @@ const TABLES = ['notes', 'tasks', 'events', 'contacts', 'chat_messages', 'notifi
 
 export async function syncToSupabase(tableName, data) {
   try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData?.session?.user?.id;
+    if (!userId) return { ok: false, error: 'Not authenticated' };
+
+    // Clean up arrays/objects to ensure user_id exists for RLS
+    const payload = Array.isArray(data)
+      ? data.map(item => ({ ...item, user_id: item.user_id || userId }))
+      : { ...data, user_id: data.user_id || userId };
+
     const { error } = await supabase
       .from(tableName)
-      .upsert(data, { onConflict: 'id' });
+      .upsert(payload, { onConflict: 'id' });
     if (error) throw error;
     return { ok: true };
   } catch (err) {

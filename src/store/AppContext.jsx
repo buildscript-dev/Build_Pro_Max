@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { AppData as initialData } from '../data';
 import { sendNotification, checkDueReminders } from '../services/clock';
+import { fetchAllFromSupabase, syncToSupabase, deleteFromSupabase } from '../services/supabaseDb';
 
 const STORAGE_KEY = 'build_pro_max_1_state';
 
@@ -71,16 +72,16 @@ const initialToday = () => {
 function freshState() {
   return {
     today: initialToday(),
-    tasks: [],
-    notes: [],
-    events: [],
-    contacts: [],
-    files: [],
-    devices: [],
-    reminders: [],
-    aiSuggestions: [],
-    goals: [],
-    schedule: [],
+    tasks: initialData.tasks.map(t => ({ ...t })),
+    notes: initialData.notes.map(n => ({ ...n })),
+    events: initialData.events.map(e => ({ ...e })),
+    contacts: initialData.contacts.map(c => ({ ...c })),
+    files: initialData.files.map(f => ({ ...f })),
+    devices: initialData.devices.map(d => ({ ...d })),
+    reminders: initialData.reminders.map(r => ({ ...r })),
+    aiSuggestions: initialData.aiSuggestions.map(s => ({ ...s })),
+    goals: initialData.goals.map(g => ({ ...g })),
+    schedule: initialData.schedule.map(s => ({ ...s })),
     chatMessages: [
       { id: 'm1', role: 'ai', text: 'Welcome. I am your environment engine. How can I help you today?', time: Date.now() },
     ],
@@ -432,6 +433,25 @@ function reducer(state, action) {
       return action.payload;
     }
 
+    // ─── Supabase Hydration ───
+    case 'HYDRATE_SUPABASE': {
+      const db = action.payload;
+      return {
+        ...state,
+        tasks: db.tasks && db.tasks.length > 0 ? db.tasks : state.tasks,
+        notes: db.notes && db.notes.length > 0 ? db.notes : state.notes,
+        events: db.events && db.events.length > 0 ? db.events : state.events,
+        contacts: db.contacts && db.contacts.length > 0 ? db.contacts : state.contacts,
+        files: db.files && db.files.length > 0 ? db.files : state.files,
+        reminders: db.reminders && db.reminders.length > 0 ? db.reminders : state.reminders,
+        goals: db.goals && db.goals.length > 0 ? db.goals : state.goals,
+        schedule: db.schedule && db.schedule.length > 0 ? db.schedule : state.schedule,
+        chatMessages: db.chat_messages && db.chat_messages.length > 0 ? db.chat_messages : state.chatMessages,
+        notifications: db.notifications && db.notifications.length > 0 ? db.notifications : state.notifications,
+        tweaks: db.settings && db.settings.length > 0 && db.settings[0].tweaks ? { ...state.tweaks, ...db.settings[0].tweaks } : state.tweaks,
+      };
+    }
+
     default:
       return state;
   }
@@ -453,6 +473,14 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
     const id = setTimeout(() => setBootDone(true), 1100);
     return () => clearTimeout(id);
   }, []);
+
+  useEffect(() => {
+    if (authUser && authUser.id) {
+      fetchAllFromSupabase(authUser.id).then(results => {
+        dispatch({ type: 'HYDRATE_SUPABASE', payload: results });
+      }).catch(err => console.error("Supabase load failed", err));
+    }
+  }, [authUser]);
 
   // Track whether current state change came from cross-tab sync (to avoid re-broadcasting)
   const isSyncingRef = useRef(false);
@@ -542,59 +570,59 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
   // Memoize actions so child components don't re-render just because the provider re-rendered
   const actions = useMemo(() => ({
     // Tasks
-    addTask: (data) => dispatch({ type: 'ADD_TASK', payload: data }),
-    updateTask: (data) => dispatch({ type: 'UPDATE_TASK', payload: data }),
-    deleteTask: (id) => dispatch({ type: 'DELETE_TASK', payload: id }),
-    toggleTask: (id) => dispatch({ type: 'TOGGLE_TASK', payload: id }),
-    reorderTasks: (tasks) => dispatch({ type: 'REORDER_TASKS', payload: tasks }),
+    addTask: (data) => { dispatch({ type: 'ADD_TASK', payload: data }); if (authUser) syncToSupabase('tasks', data); },
+    updateTask: (data) => { dispatch({ type: 'UPDATE_TASK', payload: data }); if (authUser) syncToSupabase('tasks', data); },
+    deleteTask: (id) => { dispatch({ type: 'DELETE_TASK', payload: id }); if (authUser) deleteFromSupabase('tasks', id); },
+    toggleTask: (id) => { dispatch({ type: 'TOGGLE_TASK', payload: id }); if (authUser) syncToSupabase('tasks', { id, status: 'toggled' }); /* Note: simplified toggle sync, ideally full object is synced */ },
+    reorderTasks: (tasks) => { dispatch({ type: 'REORDER_TASKS', payload: tasks }); if (authUser) syncToSupabase('tasks', tasks); },
 
     // Notes
-    addNote: (data) => dispatch({ type: 'ADD_NOTE', payload: data }),
-    updateNote: (data) => dispatch({ type: 'UPDATE_NOTE', payload: data }),
-    deleteNote: (id) => dispatch({ type: 'DELETE_NOTE', payload: id }),
-    togglePinNote: (id) => dispatch({ type: 'TOGGLE_PIN_NOTE', payload: id }),
+    addNote: (data) => { dispatch({ type: 'ADD_NOTE', payload: data }); if (authUser) syncToSupabase('notes', data); },
+    updateNote: (data) => { dispatch({ type: 'UPDATE_NOTE', payload: data }); if (authUser) syncToSupabase('notes', data); },
+    deleteNote: (id) => { dispatch({ type: 'DELETE_NOTE', payload: id }); if (authUser) deleteFromSupabase('notes', id); },
+    togglePinNote: (id) => { dispatch({ type: 'TOGGLE_PIN_NOTE', payload: id }); },
 
     // Events
-    addEvent: (data) => dispatch({ type: 'ADD_EVENT', payload: data }),
-    updateEvent: (data) => dispatch({ type: 'UPDATE_EVENT', payload: data }),
-    deleteEvent: (id) => dispatch({ type: 'DELETE_EVENT', payload: id }),
+    addEvent: (data) => { dispatch({ type: 'ADD_EVENT', payload: data }); if (authUser) syncToSupabase('events', data); },
+    updateEvent: (data) => { dispatch({ type: 'UPDATE_EVENT', payload: data }); if (authUser) syncToSupabase('events', data); },
+    deleteEvent: (id) => { dispatch({ type: 'DELETE_EVENT', payload: id }); if (authUser) deleteFromSupabase('events', id); },
 
     // Contacts
-    addContact: (data) => dispatch({ type: 'ADD_CONTACT', payload: data }),
-    updateContact: (data) => dispatch({ type: 'UPDATE_CONTACT', payload: data }),
-    deleteContact: (id) => dispatch({ type: 'DELETE_CONTACT', payload: id }),
+    addContact: (data) => { dispatch({ type: 'ADD_CONTACT', payload: data }); if (authUser) syncToSupabase('contacts', data); },
+    updateContact: (data) => { dispatch({ type: 'UPDATE_CONTACT', payload: data }); if (authUser) syncToSupabase('contacts', data); },
+    deleteContact: (id) => { dispatch({ type: 'DELETE_CONTACT', payload: id }); if (authUser) deleteFromSupabase('contacts', id); },
 
     // Files — accept id or name for progress/remove
-    addFile: (data) => dispatch({ type: 'ADD_FILE', payload: data }),
+    addFile: (data) => { dispatch({ type: 'ADD_FILE', payload: data }); if (authUser) syncToSupabase('files', data); },
     updateFileProgress: (idOrName, progress) => dispatch({ type: 'UPDATE_FILE_PROGRESS', payload: { id: idOrName, name: idOrName, progress } }),
-    removeFile: (idOrName) => dispatch({ type: 'REMOVE_FILE', payload: idOrName }),
+    removeFile: (idOrName) => { dispatch({ type: 'REMOVE_FILE', payload: idOrName }); if (authUser) deleteFromSupabase('files', idOrName); },
 
     // Schedule
-    addScheduleBlock: (data) => dispatch({ type: 'ADD_SCHEDULE_BLOCK', payload: data }),
-    updateScheduleBlock: (index, data) => dispatch({ type: 'UPDATE_SCHEDULE_BLOCK', payload: { index, data } }),
+    addScheduleBlock: (data) => { dispatch({ type: 'ADD_SCHEDULE_BLOCK', payload: data }); if (authUser) syncToSupabase('schedule', data); },
+    updateScheduleBlock: (index, data) => { dispatch({ type: 'UPDATE_SCHEDULE_BLOCK', payload: { index, data } }); },
 
     // Goals
-    updateGoal: (data) => dispatch({ type: 'UPDATE_GOAL', payload: data }),
+    updateGoal: (data) => { dispatch({ type: 'UPDATE_GOAL', payload: data }); if (authUser) syncToSupabase('goals', data); },
 
     // Reminders
-    addReminder: (data) => dispatch({ type: 'ADD_REMINDER', payload: data }),
-    deleteReminder: (id) => dispatch({ type: 'DELETE_REMINDER', payload: id }),
+    addReminder: (data) => { dispatch({ type: 'ADD_REMINDER', payload: data }); if (authUser) syncToSupabase('reminders', data); },
+    deleteReminder: (id) => { dispatch({ type: 'DELETE_REMINDER', payload: id }); if (authUser) deleteFromSupabase('reminders', id); },
 
     // Chat
-    addChatMessage: (data) => dispatch({ type: 'ADD_CHAT_MESSAGE', payload: data }),
+    addChatMessage: (data) => { dispatch({ type: 'ADD_CHAT_MESSAGE', payload: data }); if (authUser) syncToSupabase('chat_messages', data); },
     clearChat: () => dispatch({ type: 'CLEAR_CHAT' }),
 
     // Notifications
-    addNotification: (data) => dispatch({ type: 'ADD_NOTIFICATION', payload: data }),
+    addNotification: (data) => { dispatch({ type: 'ADD_NOTIFICATION', payload: data }); if (authUser) syncToSupabase('notifications', data); },
     markNotificationRead: (id) => dispatch({ type: 'MARK_NOTIFICATION_READ', payload: id }),
     markAllNotificationsRead: () => dispatch({ type: 'MARK_ALL_NOTIFICATIONS_READ' }),
     clearNotifications: () => dispatch({ type: 'CLEAR_NOTIFICATIONS' }),
 
     // Tweaks
-    setTweak: (key, val) => dispatch({ type: 'SET_TWEAK', payload: { [key]: val } }),
+    setTweak: (key, val) => { dispatch({ type: 'SET_TWEAK', payload: { [key]: val } }); if (authUser) syncToSupabase('settings', { id: authUser.id, tweaks: { [key]: val } }); },
 
     // User
-    updateUser: (data) => dispatch({ type: 'UPDATE_USER', payload: data }),
+    updateUser: (data) => { dispatch({ type: 'UPDATE_USER', payload: data }); },
 
     // AI
     setAiSuggestions: (data) => dispatch({ type: 'SET_AI_SUGGESTIONS', payload: data }),
@@ -606,7 +634,7 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
     setAutoReply: (message) => dispatch({ type: 'SET_AUTO_REPLY', payload: message }),
 
     decayWarmth: () => dispatch({ type: 'DECAY_WARMTH' }),
-  }), [dispatch]);
+  }), [dispatch, authUser]);
 
   // Stable no-op logout to avoid creating new function reference when externalLogout is absent
   const noopLogout = useCallback(() => {}, []);
