@@ -3,7 +3,7 @@ import { AppData as initialData } from '../data';
 import { sendNotification, checkDueReminders } from '../services/clock';
 import { fetchAllFromSupabase, syncToSupabase, deleteFromSupabase } from '../services/supabaseDb';
 
-const STORAGE_KEY = 'build_pro_max_1_state_v2';
+const STORAGE_KEY = 'build_pro_max_1_state_v3';
 
 function getWeekNumber(d) {
   const date = new Date(d.getTime());

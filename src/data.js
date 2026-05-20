@@ -33,9 +33,10 @@ export const AppData = {
   ],
 
   notes: [
-    { id: "n1", title: "How to Use Build_PRO_MAX_1", tag: "Guide", icon: "target", words: 120, edited: "Just now", pinned: true, date: "Today",
+    { id: "n1", title: "How to Use Build_PRO_MAX_1", tag: "Guide", icon: "target", words: 154, edited: "Just now", pinned: true, date: "Today",
       preview: "Welcome to your new Spatial Environment. You can click anywhere to create a note, task, or file. Drag the 'x' on a block to connect it to another block.",
-      ai: "Summary: This is a guide on using the spatial canvas and basic features." },
+      content: "Welcome to the **Build_PRO_MAX_1 Workspace**!\n\n## What is Notes?\nNotes is your central brain. You can write everything from meeting minutes to deep work essays here.\n- Use **bold** text by wrapping words in double asterisks like **this**.\n- Create bulleted lists using dashes (-).\n- Type `/` (slash) to trigger AI commands and quick actions.\n\n## The Spatial Canvas\nThe Canvas is a totally new way to organize your thoughts visually.\n1. **Create Containers:** Right-click anywhere on the canvas to spawn a new workspace block (like a Note, Task, or File).\n2. **Connect Things:** Drag the 'x' handle on any block and drop it onto another block to draw a bridge between them.\n3. **Move Around:** Click and drag the background to pan around your infinite spatial environment.\n4. **Disconnect:** If you want to remove a connection, just grab the bridge wire and drag it away to break it!\n\n## Let's Get Started!\nTry editing this note right now. Make a new line, type a dash, and write your first bullet point.",
+      ai: "Summary: This is a detailed guide on using the spatial canvas and basic formatting features." },
   ],
 
   events: [
