@@ -71,6 +71,7 @@ const initialToday = () => {
 
 function freshState() {
   return {
+    user: { ...initialData.user },
     today: initialToday(),
     tasks: initialData.tasks.map(t => ({ ...t })),
     notes: initialData.notes.map(n => ({ ...n })),
