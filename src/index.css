@@ -1,0 +1,537 @@
+/* Build_PRO_MAX_1 — Paper × Liquid Glass design tokens
+   ─────────────────────────────────────────────────── */
+
+:root {
+  /* Paper canvas */
+  --paper-0: #f6f1e5;          /* base paper */
+  --paper-1: #efe8d6;          /* deeper paper for shadows */
+  --paper-2: #fbf8f0;          /* highlight paper */
+  --paper-edge: #e6dec7;
+  --grain-opacity: 0.55;
+
+  /* Ink (warm-black, never pure black) */
+  --ink-1: #1a1410;            /* primary text */
+  --ink-2: #4a3f33;            /* secondary text */
+  --ink-3: #7a6e5f;            /* tertiary text */
+  --ink-4: #b3a890;            /* hairlines, captions */
+  --ink-line: rgba(26, 20, 16, 0.08);
+
+  /* Warm accent palette (Option 4 — amber / orange / coral) */
+  --accent-amber: #f5a524;
+  --accent-orange: #f06b1c;
+  --accent-coral: #e7402e;
+  --accent-rose: #c2185b;
+  --accent-warm-bg: #fff5e6;
+
+  /* Status */
+  --ok: #4a8f5e;
+  --warn: #f5a524;
+  --risk: #e7402e;
+  --info: #2a6fdb;
+
+  /* Glass */
+  --glass-tint: rgba(255, 252, 244, 0.55);
+  --glass-tint-strong: rgba(255, 252, 244, 0.72);
+  --glass-edge: rgba(255, 255, 255, 0.75);
+  --glass-edge-low: rgba(255, 255, 255, 0.4);
+  --glass-shadow-soft: 0 2px 1px rgba(255,255,255,.85) inset,
+                       0 -1px 1px rgba(0,0,0,.04) inset,
+                       0 12px 32px -8px rgba(46, 30, 12, 0.18),
+                       0 2px 6px -2px rgba(46, 30, 12, 0.10);
+  --glass-shadow-strong: 0 2px 1px rgba(255,255,255,.95) inset,
+                         0 -1px 1px rgba(0,0,0,.06) inset,
+                         0 30px 60px -20px rgba(46, 30, 12, 0.35),
+                         0 12px 24px -8px rgba(46, 30, 12, 0.18),
+                         0 2px 6px -2px rgba(46, 30, 12, 0.10);
+  --glass-blur: 24px;
+
+  /* Type */
+  --font-display: "Fraunces", "Cormorant Garamond", "Times New Roman", serif;
+  --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Radii */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 32px;
+
+  /* Spacing */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+
+  /* Motion */
+  --motion-quick: 180ms;
+  --motion-mid: 360ms;
+  --motion-slow: 620ms;
+  --ease-genie: cubic-bezier(0.34, 1.56, 0.36, 1);
+  --ease-glass: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snap:  cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--ink-1);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  background: var(--paper-0);
+}
+
+/* ─── Paper canvas ─────────────────────────────────────────── */
+.paper {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 90% 70% at 30% 0%, #fff8e8 0%, transparent 60%),
+    radial-gradient(ellipse 70% 60% at 80% 100%, #f0e3c4 0%, transparent 55%),
+    radial-gradient(ellipse 60% 50% at 50% 50%, #faf3e1 0%, var(--paper-0) 70%),
+    var(--paper-0);
+  overflow: hidden;
+  transition: background 600ms var(--ease-glass);
+}
+
+/* Mono variant — black-and-white canvas with shifting light */
+.paper.mono {
+  background:
+    radial-gradient(ellipse 90% 70% at 30% 0%, #ffffff 0%, transparent 60%),
+    radial-gradient(ellipse 70% 60% at 80% 100%, #d8d8d8 0%, transparent 55%),
+    radial-gradient(ellipse 60% 50% at 50% 50%, #f0f0f0 0%, #e8e8e8 70%),
+    #ececec;
+}
+.paper.mono::before {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.15 0 0 0 0 0.15 0 0 0 0 0.15 0 0 0 0.40 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+.paper.mono::after {
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      rgba(0, 0, 0, 0.022) 1px,
+      transparent 2px,
+      transparent 7px
+    );
+}
+.paper::before {
+  /* static warm grain — no animation, no GPU cost */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.4 0 0 0 0 0.32 0 0 0 0 0.2 0 0 0 0.28 0'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>");
+  opacity: var(--grain-opacity);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  /* animation removed — grain-shift caused continuous compositor work */
+}
+
+@keyframes grain-shift {
+  0%   { transform: translate(0, 0) }
+  20%  { transform: translate(-12px, 8px) }
+  40%  { transform: translate(8px, -12px) }
+  60%  { transform: translate(-6px, -6px) }
+  80%  { transform: translate(10px, 10px) }
+  100% { transform: translate(0, 0) }
+}
+.paper::after {
+  /* paper fiber long horizontal streaks */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      rgba(120, 90, 50, 0.018) 1px,
+      transparent 2px,
+      transparent 7px
+    );
+  pointer-events: none;
+}
+
+/* ─── Ambient drifting orbs (animation layer) ─────────────── */
+.ambient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+  opacity: var(--ambient-opacity, 1);
+  transition: opacity 600ms var(--ease-glass);
+}
+
+/* Flowing liquid silk — now a pure CSS gradient, no SVG filter */
+.liquid-fx {
+  display: none; /* removed — was the #1 GPU bottleneck (feTurbulence+feDisplacementMap+feGaussianBlur on full viewport) */
+}
+
+/* Only 2 orbs instead of 4 — reduced size and blur for GPU efficiency */
+.ambient .orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);        /* was 80px — cut in half */
+  opacity: 0.45;             /* was 0.55 — slightly softer */
+  mix-blend-mode: multiply;
+  content-visibility: auto;  /* skip rendering when off-screen */
+  contain: paint;
+  /* will-change removed — promotes to GPU layer but 4 large elements = VRAM pressure */
+}
+.paper.mono ~ .ambient .orb {
+  background: radial-gradient(circle, #888 0%, transparent 70%) !important;
+  opacity: 0.18;
+  mix-blend-mode: multiply;
+}
+/* Orb 1 — top-left warm anchor (kept) */
+.ambient .o1 {
+  width: 420px; height: 420px;    /* was 520px */
+  left: -80px; top: -100px;
+  background: radial-gradient(circle, var(--accent-amber) 0%, transparent 70%);
+  animation: drift-1 28s ease-in-out infinite;  /* slowed from 22s — fewer frames/sec */
+}
+/* Orb 2 — bottom right warm accent (kept) */
+.ambient .o2 {
+  width: 360px; height: 360px;    /* was 460px */
+  right: -60px; bottom: 0;
+  background: radial-gradient(circle, var(--accent-coral) 0%, transparent 70%);
+  animation: drift-2 34s ease-in-out infinite;  /* slowed from 28s */
+}
+/* Orbs 3 & 4 REMOVED — were the largest and most GPU-expensive */
+.ambient .o3 { display: none; }
+.ambient .o4 { display: none; }
+
+@keyframes drift-1 {
+  0%, 100% { transform: translate(0, 0) }
+  50%      { transform: translate(80px, 60px) }    /* simplified from 3-keyframe drift */
+}
+@keyframes drift-2 {
+  0%, 100% { transform: translate(0, 0) }
+  50%      { transform: translate(-80px, -60px) }
+}
+
+/* deckle edge */
+.paper-edge {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  box-shadow:
+    inset 0 0 0 1px rgba(120, 90, 50, 0.06),
+    inset 0 0 120px rgba(120, 90, 50, 0.10),
+    inset 0 0 6px rgba(255, 255, 255, 0.6);
+}
+
+/* ─── Liquid Glass: frame + inner pane ───────────────────────
+   Each .glass is an outer transparent frame with a metallic
+   gold/cream gradient ring. Content lives inside .glass-pane.
+   ──────────────────────────────────────────────────────────── */
+.glass {
+  position: relative;
+  padding: 9px;
+  border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, 0.06);
+  /* blur halved from 28px to 14px — single largest CSS paint cost reduction */
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+          backdrop-filter: blur(14px) saturate(140%);
+  box-shadow:
+    0 20px 40px -16px rgba(0, 0, 0, 0.25),
+    0 8px 18px -8px rgba(0, 0, 0, 0.14),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.22);
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow var(--motion-mid) var(--ease-glass);
+}
+
+/* Metallic ring — static, no rotation animation */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.4px;
+  /* fixed angle — removed ring-rotate animation which ran on every card */
+  background: conic-gradient(
+    from 135deg,
+    rgba(255, 255, 255, 0.90) 0deg,
+    rgba(245, 220, 170, 0.80) 40deg,
+    rgba(255, 240, 210, 0.50) 90deg,
+    rgba(212, 175, 124, 0.65) 140deg,
+    rgba(255, 255, 255, 0.90) 200deg,
+    rgba(232, 200, 150, 0.50) 260deg,
+    rgba(255, 252, 235, 0.80) 320deg,
+    rgba(255, 255, 255, 0.90) 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  /* animation: ring-rotate — REMOVED, was triggering GPU composite on every card */
+}
+@property --ring-angle {
+  syntax: "<angle>";
+  initial-value: 135deg;
+  inherits: false;
+}
+@keyframes ring-rotate {
+  0%   { --ring-angle: 0deg; }
+  100% { --ring-angle: 360deg; }
+}
+
+/* outer ambient glow that breathes */
+.glass::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    0 0 24px rgba(255, 245, 220, 0.10),
+    0 0 1px rgba(255, 255, 255, 0.30);
+  opacity: 0.6;
+}
+
+/* ─── Inner content pane ─────────────────────────────────── */
+.glass-pane {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: calc(var(--r-lg) - 6px);
+  background: var(--glass-tint);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.50),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.04),
+    0 4px 14px -6px rgba(0, 0, 0, 0.10);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* drifting shine sweep — removed continuous animation, replaced with static sheen */
+.glass-pane::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.12) 40%,
+    rgba(255, 255, 255, 0.06) 60%,
+    transparent 100%
+  );
+  /* pane-sweep animation REMOVED — was running on every card, every 11s continuously */
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  z-index: 0;
+}
+@keyframes pane-sweep {
+  0%   { transform: translateX(-130%) }
+  55%  { transform: translateX(130%) }
+  100% { transform: translateX(130%) }
+}
+
+/* chromatic refraction band along bottom of pane */
+.glass-pane::after {
+  content: "";
+  position: absolute;
+  inset: auto 14% 0 14%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(245, 165, 36, 0.35) 25%,
+    rgba(231, 64, 46, 0.30) 50%,
+    rgba(42, 111, 219, 0.30) 75%,
+    transparent 100%);
+  filter: blur(0.5px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* keep direct content above the sweep */
+.glass-pane > * { position: relative; z-index: 1; }
+
+/* Mono variant — colors */
+body.canvas-mono {
+  --glass-tint:        rgba(255, 255, 255, 0.40);
+  --glass-tint-strong: rgba(255, 255, 255, 0.62);
+  --glass-edge:        rgba(255, 255, 255, 0.85);
+  --glass-edge-low:    rgba(255, 255, 255, 0.5);
+  --ink-1: #0d0d0d;
+  --ink-2: #3a3a3a;
+  --ink-3: #6b6b6b;
+  --ink-4: #a8a8a8;
+  --ink-line: rgba(0, 0, 0, 0.07);
+  --paper-0: #ececec;
+}
+body.canvas-mono .glass {
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 36px 70px -20px rgba(0, 0, 0, 0.35),
+    0 14px 28px -10px rgba(0, 0, 0, 0.20),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
+}
+
+.glass--strong .glass-pane {
+  background: var(--glass-tint-strong);
+}
+.glass--flat .glass-pane {
+  background: rgba(255, 252, 244, 0.55);
+}
+.glass--flat { padding: 0; box-shadow: none; }
+.glass--flat::before, .glass--flat::after { display: none; }
+
+/* Card mount stagger — applied via inline animation-delay */
+@keyframes card-rise {
+  from { opacity: 0; transform: translateY(14px) scale(.985); filter: blur(2px); }
+  to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+.card-rise {
+  animation: card-rise 720ms var(--ease-genie) both;
+}
+
+/* ─── Typography helpers ───────────────────────────────────── */
+.t-display { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.02em; }
+.t-display-italic { font-family: var(--font-display); font-style: italic; font-weight: 400; letter-spacing: -0.01em; }
+.t-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.t-cap { text-transform: uppercase; letter-spacing: 0.14em; font-size: 10.5px; font-weight: 600; color: var(--ink-3); }
+.t-num { font-family: var(--font-display); font-variant-numeric: tabular-nums; font-weight: 400; }
+
+/* ─── Reset utilities ──────────────────────────────────────── */
+button { all: unset; cursor: default; display: inline-flex; align-items: center; }
+button:focus-visible { outline: 2px solid var(--accent-orange); outline-offset: 2px; border-radius: 4px; }
+hr { border: 0; height: 1px; background: var(--ink-line); margin: 0; }
+::selection { background: rgba(245, 165, 36, 0.30); color: var(--ink-1); }
+
+/* ─── Scrollbar ────────────────────────────────────────────── */
+.scroll { overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(26,20,16,.18) transparent; }
+.scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll::-webkit-scrollbar-thumb { background: rgba(26,20,16,.18); border-radius: 4px; }
+.scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Compiz lamp / genie morph helpers */
+.lamp-shadow {
+  transition: filter var(--motion-mid) var(--ease-genie),
+              transform var(--motion-mid) var(--ease-genie);
+}
+
+/* hairline separator inside glass */
+.hair { height: 0.5px; background: var(--ink-line); }
+.hair-v { width: 0.5px; align-self: stretch; background: var(--ink-line); }
+
+/* tiny pill chip */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 22px; padding: 0 9px; border-radius: 999px;
+  background: rgba(255, 252, 244, 0.6);
+  border: 0.5px solid rgba(26, 20, 16, 0.08);
+  font-size: 11px; color: var(--ink-2); font-weight: 500;
+}
+.chip-dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+
+/* AI shimmer text */
+@keyframes ai-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.ai-text {
+  background: linear-gradient(90deg,
+    var(--ink-2) 0%,
+    var(--accent-orange) 35%,
+    var(--accent-amber) 50%,
+    var(--accent-orange) 65%,
+    var(--ink-2) 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: ai-shimmer 4s linear infinite;
+}
+
+/* faint animated noise on glass when "intense" */
+@keyframes orb-pulse {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.65; }
+  50%      { transform: scale(1.08) rotate(40deg); opacity: 0.85; }
+}
+
+/* Drag interaction states */
+.dragging { cursor: grabbing !important; }
+.dragging * { pointer-events: none !important; }
+
+/* selection layer */
+[data-screen] { position: absolute; inset: 0; }
+
+/* command bar */
+.cmdk-input { all: unset; flex: 1; min-width: 0; font-size: 18px;
+  font-family: var(--font-display); color: var(--ink-1); letter-spacing: -0.01em; }
+.cmdk-input::placeholder { color: var(--ink-3); font-style: italic; }
+
+/* Expanded card animation */
+@keyframes expand-fade { from { backdrop-filter: blur(0px); background: rgba(46,30,12,0) } to { backdrop-filter: blur(2px); background: rgba(46,30,12,.06) } }
+@keyframes genie-in {
+  0%   { opacity: 0; transform: translateY(40px) scale(.6); border-radius: 32px; filter: blur(8px); }
+  50%  { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Boot splash */
+@keyframes splash-out { to { opacity: 0; pointer-events: none } }
+@keyframes splash-orb { from { transform: scale(.7); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+@keyframes splash-text { 0% { opacity: 0; transform: translateY(8px) } 100% { opacity: 1; transform: translateY(0) } }
+
+/* Dock animations */
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes pop-in  { from { opacity: 0; transform: translateY(-6px) scale(.985) } to { opacity: 1; transform: none } }
+
+/* ─── Performance: reduce ambient orb blur overhead ────────── */
+.ambient .orb { filter: blur(60px); }  /* was 80px — 25% less GPU cost */
+
+/* ─── Accessibility: prefers-reduced-motion ─────────────────
+   Disables all decorative animations for users who request it
+   via OS accessibility settings (vestibular / epilepsy safety).
+   ─────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  /* Kill all animations and transitions */
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Freeze the rotating glass ring */
+  .glass::before { animation: none; }
+
+  /* Freeze pane shine sweep */
+  .glass-pane::before { animation: none; }
+
+  /* Freeze grain shift */
+  .paper::before { animation: none; }
+
+  /* Freeze card rise stagger */
+  .card-rise { animation: none; opacity: 1; transform: none; filter: none; }
+
+  /* Freeze ambient orbs */
+  .ambient .orb { animation: none; }
+
+  /* Freeze AI shimmer */
+  .ai-text { animation: none; }
+
+  /* Keep the orb-pulse dot alive but just static */
+  .chip-dot { animation: none; }
+}

@@ -1,0 +1,437 @@
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useState, useRef, useMemo } from 'react';
+import { AppData as initialData, accentColor, DOCK_ITEMS } from '../data';
+import { sendNotification, checkDueReminders } from '../services/clock';
+
+const STORAGE_KEY = 'build_pro_max_1_state';
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // ensure today/weekOf is updated
+      const now = new Date();
+      const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const dow = days[now.getDay()];
+      const month = months[now.getMonth()];
+      const date = now.getDate();
+      parsed.today = {
+        ...parsed.today,
+        date: `${dow}, ${month} ${date}`,
+        weekOf: `Week ${Math.ceil((now - new Date(now.getFullYear(),0,1))/604800000)} · ${month} ${date}–${date+6}`,
+      };
+      return parsed;
+    }
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
+const initialToday = () => {
+  const now = new Date();
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return {
+    ...initialData.today,
+    date: `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}`,
+    weekOf: `Week ${Math.ceil((now - new Date(now.getFullYear(),0,1))/604800000)} · ${months[now.getMonth()]} ${now.getDate()}–${now.getDate()+6}`,
+  };
+};
+
+function freshState() {
+  return {
+    ...initialData,
+    today: initialToday(),
+    tasks: initialData.tasks.map(t => ({ ...t })),
+    notes: initialData.notes.map(n => ({ ...n })),
+    events: initialData.events.map(e => ({ ...e })),
+    contacts: initialData.contacts.map(c => ({ ...c })),
+    files: initialData.files.map(f => ({ ...f })),
+    devices: initialData.devices.map(d => ({ ...d })),
+    reminders: initialData.reminders.map(r => ({ ...r })),
+    aiSuggestions: initialData.aiSuggestions.map(s => ({ ...s })),
+    goals: initialData.goals.map(g => ({ ...g })),
+    schedule: initialData.schedule.map(s => ({ ...s })),
+    chatMessages: [
+      { id: 'm1', role: 'ai', text: 'Morning, Lior. I\'ve been watching your week. You want the full picture or the one thing you should do first?', time: Date.now() - 120000 },
+      { id: 'm2', role: 'user', text: 'the one thing.', time: Date.now() - 60000 },
+      { id: 'm3', role: 'ai', text: 'Send the Bessemer follow-up before 14:30. Memo v3 is good. Don\'t rewrite it. Don\'t wait for Caro to reply. Just send.', actions: ['Open memo', 'Send now', 'Push 30m'], time: Date.now() },
+    ],
+    notifications: [
+      { id: 'n1', text: 'Bessemer memo due in 4h 06m', read: false, time: Date.now(), kind: 'warning' },
+      { id: 'n2', text: 'Sana decision overdue by 11 days', read: false, time: Date.now(), kind: 'critical' },
+    ],
+    tweaks: {
+      glassBlur: 28,
+      motion: 'lively',
+      nav: 'dock',
+      canvas: 'mono',
+      palette: ['#f5a524', '#f06b1c', '#e7402e', '#c2185b'],
+      paperWarmth: 1,
+      grain: 0.45,
+      ambient: 1,
+    },
+    nextNoteId: 7,
+    nextTaskId: 9,
+    nextEventId: 12,
+    nextContactId: 9,
+  };
+}
+
+function generateId() { return Math.random().toString(36).substring(2, 9); }
+
+function reducer(state, action) {
+  switch (action.type) {
+    // ─── Tasks ───
+    case 'ADD_TASK': {
+      const id = `t${state.nextTaskId}`;
+      const newTask = {
+        title: '',
+        due: 'Today',
+        priority: 'P2',
+        status: 'todo',
+        project: 'General',
+        ai: null,
+        createdAt: Date.now(),
+        ...action.payload,
+        id,
+      };
+      return { ...state, tasks: [newTask, ...state.tasks], nextTaskId: state.nextTaskId + 1 };
+    }
+    case 'UPDATE_TASK': {
+      const tasks = state.tasks.map(t => t.id === action.payload.id ? { ...t, ...action.payload } : t);
+      return { ...state, tasks };
+    }
+    case 'DELETE_TASK': {
+      const tasks = state.tasks.filter(t => t.id !== action.payload);
+      return { ...state, tasks };
+    }
+    case 'TOGGLE_TASK': {
+      const tasks = state.tasks.map(t => t.id === action.payload ? { ...t, status: t.status === 'done' ? 'todo' : 'done' } : t);
+      return { ...state, tasks };
+    }
+    case 'REORDER_TASKS': {
+      return { ...state, tasks: action.payload };
+    }
+
+    // ─── Notes ───
+    case 'ADD_NOTE': {
+      const id = `n${state.nextNoteId}`;
+      const newNote = {
+        title: 'Untitled',
+        tag: 'General',
+        icon: 'notes',
+        words: 0,
+        edited: 'just now',
+        pinned: false,
+        preview: '',
+        ai: null,
+        content: '',
+        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        createdAt: Date.now(),
+        ...action.payload,
+        id,
+      };
+      return { ...state, notes: [newNote, ...state.notes], nextNoteId: state.nextNoteId + 1 };
+    }
+    case 'UPDATE_NOTE': {
+      const notes = state.notes.map(n => n.id === action.payload.id ? {
+        ...n, ...action.payload,
+        edited: 'just now',
+        words: (action.payload.content || n.content || n.preview || '').split(/\s+/).filter(Boolean).length || n.words,
+      } : n);
+      return { ...state, notes };
+    }
+    case 'DELETE_NOTE': {
+      const notes = state.notes.filter(n => n.id !== action.payload);
+      return { ...state, notes };
+    }
+    case 'TOGGLE_PIN_NOTE': {
+      const notes = state.notes.map(n => n.id === action.payload ? { ...n, pinned: !n.pinned } : n);
+      return { ...state, notes };
+    }
+
+    // ─── Events / Calendar ───
+    case 'ADD_EVENT': {
+      const id = `e${state.nextEventId}`;
+      const newEvent = {
+        day: new Date().getDate(),
+        title: 'New event',
+        color: 'amber',
+        time: '12:00',
+        ...action.payload,
+        id,
+      };
+      return { ...state, events: [...state.events, newEvent], nextEventId: state.nextEventId + 1 };
+    }
+    case 'UPDATE_EVENT': {
+      const events = state.events.map(e => e.id === action.payload.id ? { ...e, ...action.payload } : e);
+      return { ...state, events };
+    }
+    case 'DELETE_EVENT': {
+      const events = state.events.filter(e => e.id !== action.payload);
+      return { ...state, events };
+    }
+
+    // ─── Contacts ───
+    case 'ADD_CONTACT': {
+      const id = `c${state.nextContactId}`;
+      const newContact = {
+        name: '',
+        role: '',
+        tag: 'Personal',
+        last: 'Just now',
+        warmth: 0.5,
+        avatar: '??',
+        color: 'amber',
+        ai: null,
+        ...action.payload,
+        id,
+      };
+      return { ...state, contacts: [...state.contacts, newContact], nextContactId: state.nextContactId + 1 };
+    }
+    case 'UPDATE_CONTACT': {
+      const contacts = state.contacts.map(c => c.id === action.payload.id ? { ...c, ...action.payload } : c);
+      return { ...state, contacts };
+    }
+    case 'DELETE_CONTACT': {
+      const contacts = state.contacts.filter(c => c.id !== action.payload);
+      return { ...state, contacts };
+    }
+    case 'DECAY_WARMTH': {
+      const contacts = state.contacts.map(c => ({
+        ...c,
+        warmth: Math.max(0.1, +(c.warmth - 0.03).toFixed(2)),
+      }));
+      return { ...state, contacts };
+    }
+
+    // ─── Files ───
+    case 'ADD_FILE': {
+      const fileId = `file_${generateId()}`;
+      return { ...state, files: [{ id: fileId, ...action.payload, progress: 0 }, ...state.files] };
+    }
+    case 'UPDATE_FILE_PROGRESS': {
+      // Support matching by id (preferred) or name (legacy fallback)
+      const files = state.files.map(f =>
+        (f.id && f.id === action.payload.id) || f.name === action.payload.name
+          ? { ...f, progress: action.payload.progress }
+          : f
+      );
+      return { ...state, files };
+    }
+    case 'REMOVE_FILE': {
+      // Support matching by id (preferred) or name (legacy fallback)
+      const files = state.files.filter(f =>
+        f.id ? f.id !== action.payload : f.name !== action.payload
+      );
+      return { ...state, files };
+    }
+
+    // ─── Schedule ───
+    case 'ADD_SCHEDULE_BLOCK': {
+      return { ...state, schedule: [...state.schedule, { ...action.payload }] };
+    }
+    case 'UPDATE_SCHEDULE_BLOCK': {
+      const schedule = state.schedule.map((b, i) => i === action.payload.index ? { ...b, ...action.payload.data } : b);
+      return { ...state, schedule };
+    }
+
+    // ─── Goals ───
+    case 'UPDATE_GOAL': {
+      const goals = state.goals.map(g => g.name === action.payload.name ? { ...g, ...action.payload } : g);
+      return { ...state, goals };
+    }
+
+    // ─── Reminders ───
+    case 'ADD_REMINDER': {
+      return { ...state, reminders: [...state.reminders, { id: generateId(), ...action.payload }] };
+    }
+    case 'DELETE_REMINDER': {
+      const reminders = state.reminders.filter(r => r.id !== action.payload);
+      return { ...state, reminders };
+    }
+
+    // ─── Chat ───
+    case 'ADD_CHAT_MESSAGE': {
+      return { ...state, chatMessages: [...state.chatMessages, { id: generateId(), time: Date.now(), ...action.payload }] };
+    }
+
+    // ─── Notifications ───
+    case 'ADD_NOTIFICATION': {
+      return { ...state, notifications: [{ id: generateId(), time: Date.now(), read: false, ...action.payload }, ...state.notifications].slice(0, 50) };
+    }
+    case 'MARK_NOTIFICATION_READ': {
+      const notifications = state.notifications.map(n => n.id === action.payload ? { ...n, read: true } : n);
+      return { ...state, notifications };
+    }
+    case 'MARK_ALL_NOTIFICATIONS_READ': {
+      const notifications = state.notifications.map(n => ({ ...n, read: true }));
+      return { ...state, notifications };
+    }
+    case 'CLEAR_NOTIFICATIONS': {
+      return { ...state, notifications: [] };
+    }
+
+    // ─── Tweaks ───
+    case 'SET_TWEAK': {
+      const edits = typeof action.payload === 'object' ? action.payload : { [action.key]: action.val };
+      return { ...state, tweaks: { ...state.tweaks, ...edits } };
+    }
+
+    // ─── User ───
+    case 'UPDATE_USER': {
+      return { ...state, user: { ...state.user, ...action.payload } };
+    }
+
+    // ─── AI Suggestions ───
+    case 'SET_AI_SUGGESTIONS': {
+      return { ...state, aiSuggestions: action.payload };
+    }
+
+    default:
+      return state;
+  }
+}
+
+const AppContext = createContext(null);
+
+export function AppProvider({ children, authUser: initialAuthUser = null }) {
+  const saved = loadState();
+  const [state, dispatch] = useReducer(reducer, saved || freshState());
+  const [bootDone, setBootDone] = useState(false);
+  const [authUser, setAuthUser] = useState(initialAuthUser);
+
+  useEffect(() => {
+    const id = setTimeout(() => setBootDone(true), 1100);
+    return () => clearTimeout(id);
+  }, []);
+
+  // Debounced localStorage persistence — avoid serializing on every tiny dispatch
+  const persistTimer = useRef(null);
+  useEffect(() => {
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(() => {
+      try {
+        const { chatMessages, ...rest } = state;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
+      } catch (e) { /* quota exceeded — ignore */ }
+    }, 400);
+    return () => clearTimeout(persistTimer.current);
+  }, [state]);
+
+  // Use a ref to always have fresh state inside the AI interval (avoids stale closure)
+  const stateRef = useRef(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  // Stable AI suggestion interval — runs every 30s, reads from ref to avoid stale data
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const s = stateRef.current;
+      const now = new Date();
+      const h = now.getHours();
+      const recent = s.tasks.filter(t => t.status === 'todo' && /today/i.test(t.due));
+      const overdue = s.tasks.filter(t => t.status === 'todo' && /past/i.test(t.due));
+      const suggestions = [];
+      if (recent.length > 2) suggestions.push({ kind: 'focus', text: `You have ${recent.length} tasks due today. Start with the highest priority first.` });
+      if (overdue.length > 0) suggestions.push({ kind: 'reschedule', text: `${overdue.length} task(s) are overdue. Want to reschedule them?` });
+      if (h >= 12 && h < 14) suggestions.push({ kind: 'buffer', text: 'Afternoon energy dip incoming. Protect your 14:00–15:00 for focused work.' });
+      if (suggestions.length > 0 && JSON.stringify(suggestions) !== JSON.stringify(s.aiSuggestions)) {
+        dispatch({ type: 'SET_AI_SUGGESTIONS', payload: suggestions });
+      }
+    }, 30000);
+    return () => clearInterval(iv);
+  }, []); // stable — only runs once, reads live state via stateRef
+
+  // Reminder checker — fires browser notifications for reminders every 60s
+  const firedRef = useRef(new Set());
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const s = stateRef.current;
+      const due = checkDueReminders(s.reminders);
+      if (due.length > 0) {
+        due.forEach(r => {
+          if (firedRef.current.has(r.id)) return;
+          firedRef.current.add(r.id);
+          sendNotification(r.title || 'Reminder', { body: r.text || r.title || '' });
+          dispatch({ type: 'ADD_NOTIFICATION', payload: { text: `⏰ ${r.title || 'Reminder'}`, kind: 'info' } });
+        });
+      }
+    }, 60000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Memoize actions so child components don't re-render just because the provider re-rendered
+  const actions = useMemo(() => ({
+    // Tasks
+    addTask: (data) => dispatch({ type: 'ADD_TASK', payload: data }),
+    updateTask: (data) => dispatch({ type: 'UPDATE_TASK', payload: data }),
+    deleteTask: (id) => dispatch({ type: 'DELETE_TASK', payload: id }),
+    toggleTask: (id) => dispatch({ type: 'TOGGLE_TASK', payload: id }),
+    reorderTasks: (tasks) => dispatch({ type: 'REORDER_TASKS', payload: tasks }),
+
+    // Notes
+    addNote: (data) => dispatch({ type: 'ADD_NOTE', payload: data }),
+    updateNote: (data) => dispatch({ type: 'UPDATE_NOTE', payload: data }),
+    deleteNote: (id) => dispatch({ type: 'DELETE_NOTE', payload: id }),
+    togglePinNote: (id) => dispatch({ type: 'TOGGLE_PIN_NOTE', payload: id }),
+
+    // Events
+    addEvent: (data) => dispatch({ type: 'ADD_EVENT', payload: data }),
+    updateEvent: (data) => dispatch({ type: 'UPDATE_EVENT', payload: data }),
+    deleteEvent: (id) => dispatch({ type: 'DELETE_EVENT', payload: id }),
+
+    // Contacts
+    addContact: (data) => dispatch({ type: 'ADD_CONTACT', payload: data }),
+    updateContact: (data) => dispatch({ type: 'UPDATE_CONTACT', payload: data }),
+    deleteContact: (id) => dispatch({ type: 'DELETE_CONTACT', payload: id }),
+
+    // Files — accept id or name for progress/remove
+    addFile: (data) => dispatch({ type: 'ADD_FILE', payload: data }),
+    updateFileProgress: (idOrName, progress) => dispatch({ type: 'UPDATE_FILE_PROGRESS', payload: { id: idOrName, name: idOrName, progress } }),
+    removeFile: (idOrName) => dispatch({ type: 'REMOVE_FILE', payload: idOrName }),
+
+    // Schedule
+    addScheduleBlock: (data) => dispatch({ type: 'ADD_SCHEDULE_BLOCK', payload: data }),
+    updateScheduleBlock: (index, data) => dispatch({ type: 'UPDATE_SCHEDULE_BLOCK', payload: { index, data } }),
+
+    // Goals
+    updateGoal: (data) => dispatch({ type: 'UPDATE_GOAL', payload: data }),
+
+    // Reminders
+    addReminder: (data) => dispatch({ type: 'ADD_REMINDER', payload: data }),
+    deleteReminder: (id) => dispatch({ type: 'DELETE_REMINDER', payload: id }),
+
+    // Chat
+    addChatMessage: (data) => dispatch({ type: 'ADD_CHAT_MESSAGE', payload: data }),
+
+    // Notifications
+    addNotification: (data) => dispatch({ type: 'ADD_NOTIFICATION', payload: data }),
+    markNotificationRead: (id) => dispatch({ type: 'MARK_NOTIFICATION_READ', payload: id }),
+    markAllNotificationsRead: () => dispatch({ type: 'MARK_ALL_NOTIFICATIONS_READ' }),
+    clearNotifications: () => dispatch({ type: 'CLEAR_NOTIFICATIONS' }),
+
+    // Tweaks
+    setTweak: (key, val) => dispatch({ type: 'SET_TWEAK', payload: { [key]: val } }),
+
+    // User
+    updateUser: (data) => dispatch({ type: 'UPDATE_USER', payload: data }),
+
+    // AI
+    setAiSuggestions: (data) => dispatch({ type: 'SET_AI_SUGGESTIONS', payload: data }),
+
+    decayWarmth: () => dispatch({ type: 'DECAY_WARMTH' }),
+  }), [dispatch]);
+
+  return (
+    <AppContext.Provider value={{ state, actions, bootDone, authUser, setAuthUser }}>
+      {children}
+    </AppContext.Provider>
+  );
+}
+
+export function useApp() {
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error('useApp must be inside AppProvider');
+  return ctx;
+}

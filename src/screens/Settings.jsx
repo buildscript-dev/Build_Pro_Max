@@ -1,0 +1,368 @@
+import React, { useState, useEffect } from 'react';
+import { GlassCard, PaperButton, Avatar, Icon } from '../components/ui/Icons';
+import { accentColor } from '../data';
+import { useApp } from '../store/AppContext';
+import { clearSession, deleteAccount } from '../store/auth';
+import { connectGmail, disconnectGmail, isGmailConnected, getGmailEmail } from '../services/gmail';
+import { requestNotificationPermission } from '../services/clock';
+
+const ScreenShell = ({ title, eyebrow, subtitle, children, padTop = 86, padBottom = 110 }) => (
+  <div className="scroll" style={{
+    position: "absolute", inset: 0, paddingTop: padTop, paddingBottom: padBottom,
+    paddingLeft: 36, paddingRight: 36, overflowY: "auto",
+  }}>
+    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 28, paddingLeft: 6, paddingRight: 6 }}>
+      <div>
+        {eyebrow && <div className="t-cap" style={{ marginBottom: 8, color: "var(--accent-orange)" }}>{eyebrow}</div>}
+        <h1 className="t-display" style={{ margin: 0, fontSize: 52, fontWeight: 400, letterSpacing: "-0.025em", lineHeight: 1.02 }}>
+          {title}
+        </h1>
+        {subtitle && <div style={{ marginTop: 10, fontSize: 14, color: "var(--ink-2)", maxWidth: 720 }}>{subtitle}</div>}
+      </div>
+    </div>
+    {children}
+  </div>
+);
+
+const NAV_BASE = ['Profile', 'Appearance', 'AI behavior', 'Connected accounts', 'Devices', 'Notifications', 'Privacy', 'Keyboard', 'About'];
+
+export const Settings = ({ onLogout }) => {
+  const { state, actions, authUser } = useApp();
+  const { user, tweaks } = state;
+  const [activeSection, setActiveSection] = useState('Appearance');
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileData, setProfileData] = useState({ ...user });
+  const [apiKey, setApiKey] = useState(() => { try { return localStorage.getItem('openrouter_api_key') || ''; } catch { return ''; } });
+  const [gmailConnected, setGmailConnected] = useState(isGmailConnected());
+  const [gmailEmail, setGmailEmail] = useState(getGmailEmail());
+  const [gmailLoading, setGmailLoading] = useState(false);
+  const [notifStatus, setNotifStatus] = useState('');
+
+  const NAV_ITEMS = authUser ? [...NAV_BASE, 'Account'] : NAV_BASE;
+
+  const saveApiKey = () => {
+    localStorage.setItem('openrouter_api_key', apiKey);
+    actions.addNotification({ text: 'AI API key saved', kind: 'info' });
+  };
+
+  const handleConnectGmail = async () => {
+    setGmailLoading(true);
+    const result = await connectGmail();
+    if (result.ok) {
+      setGmailConnected(true);
+      setGmailEmail(result.email || 'Connected');
+      actions.addNotification({ text: 'Gmail connected', kind: 'info' });
+    } else {
+      actions.addNotification({ text: result.error || 'Gmail connection failed', kind: 'warning' });
+    }
+    setGmailLoading(false);
+  };
+
+  const handleDisconnectGmail = async () => {
+    await disconnectGmail();
+    setGmailConnected(false);
+    setGmailEmail('');
+    actions.addNotification({ text: 'Gmail disconnected', kind: 'info' });
+  };
+
+  const handleRequestNotif = async () => {
+    const result = await requestNotificationPermission();
+    setNotifStatus(result);
+    actions.addNotification({ text: result === 'granted' ? 'Notifications enabled' : 'Notifications denied', kind: 'info' });
+  };
+
+  const handleLogout = () => {
+    clearSession();
+    window.location.reload();
+  };
+
+  const handleDeleteAccount = async () => {
+    if (window.confirm('Are you sure? This will permanently delete your account and all local data.')) {
+      await deleteAccount(authUser?.email || '');
+      localStorage.clear();
+      window.location.reload();
+    }
+  };
+
+  const saveProfile = () => {
+    actions.updateUser(profileData);
+    actions.addNotification({ text: 'Profile updated', kind: 'info' });
+    setEditingProfile(false);
+  };
+
+  const cycleNav = () => {
+    const modes = ['dock', 'rail', 'top'];
+    const idx = modes.indexOf(tweaks.nav);
+    actions.setTweak('nav', modes[(idx + 1) % modes.length]);
+  };
+
+  const cycleMotion = () => {
+    const modes = ['calm', 'balanced', 'lively'];
+    const idx = modes.indexOf(tweaks.motion);
+    actions.setTweak('motion', modes[(idx + 1) % modes.length]);
+  };
+
+  const toggleCanvas = () => {
+    actions.setTweak('canvas', tweaks.canvas === 'mono' ? 'warm' : 'mono');
+  };
+
+  const adjustGlass = (delta) => {
+    const newVal = Math.max(8, Math.min(48, (tweaks.glassBlur || 28) + delta));
+    actions.setTweak('glassBlur', newVal);
+  };
+
+  return (
+    <ScreenShell
+      eyebrow="Settings"
+      title={<>Make it yours.</>}
+      subtitle={<>Most of these live in the Tweaks panel too. Anything you change here syncs across devices in &lt; 2s.</>}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16, alignItems: "start" }}>
+        <GlassCard padding={0}>
+          {NAV_ITEMS.map((s, i) => (
+            <div key={s} onClick={() => setActiveSection(s)} style={{
+              padding: "12px 18px", fontSize: 13.5,
+              background: activeSection === s ? "rgba(245,165,36,.10)" : "transparent",
+              color: activeSection === s ? "var(--accent-orange)" : "var(--ink-2)",
+              fontWeight: activeSection === s ? 600 : 500,
+              borderBottom: i < NAV_ITEMS.length - 1 ? "0.5px solid var(--ink-line)" : "none",
+              boxShadow: activeSection === s ? "inset 3px 0 0 var(--accent-orange)" : "none",
+              cursor: "default",
+            }}>{s}</div>
+          ))}
+        </GlassCard>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {activeSection === 'Profile' && (
+            <GlassCard>
+              <div className="t-cap">Profile</div>
+              {editingProfile ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 14 }}>
+                  <input value={profileData.name} onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
+                    style={{ padding: "8px 12px", borderRadius: 8, fontSize: 14, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}
+                  />
+                  <input value={profileData.role} onChange={(e) => setProfileData({ ...profileData, role: e.target.value })}
+                    style={{ padding: "8px 12px", borderRadius: 8, fontSize: 14, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}
+                  />
+                  <input value={profileData.handle} onChange={(e) => setProfileData({ ...profileData, handle: e.target.value })}
+                    style={{ padding: "8px 12px", borderRadius: 8, fontSize: 14, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}
+                  />
+                  <input value={profileData.timezone} onChange={(e) => setProfileData({ ...profileData, timezone: e.target.value })}
+                    style={{ padding: "8px 12px", borderRadius: 8, fontSize: 14, border: "0.5px solid rgba(26,20,16,.1)", background: "rgba(255,252,244,.7)" }}
+                  />
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                    <PaperButton small onClick={() => setEditingProfile(false)}>Cancel</PaperButton>
+                    <PaperButton small primary onClick={saveProfile}>Save profile</PaperButton>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 14 }}>
+                  <Avatar initials={user.avatar} color="orange" size={64} />
+                  <div>
+                    <div className="t-display" style={{ fontSize: 24, fontWeight: 400 }}>{user.name}</div>
+                    <div style={{ fontSize: 12, color: "var(--ink-3)" }}>{user.role}</div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      <span className="chip">{user.handle}</span>
+                      <span className="chip">{user.timezone}</span>
+                      <span className="chip">{user.pronouns}</span>
+                    </div>
+                    <PaperButton small onClick={() => { setProfileData({ ...user }); setEditingProfile(true); }} style={{ marginTop: 10 }}>Edit profile</PaperButton>
+                  </div>
+                </div>
+              )}
+            </GlassCard>
+          )}
+
+          {activeSection === 'Appearance' && (
+            <GlassCard>
+              <div className="t-cap">Appearance</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginTop: 16 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>Glass intensity</div>
+                  <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>How frosted the floating panels feel.</div>
+                  <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                    <button onClick={() => adjustGlass(-4)} style={{ fontSize: 14, padding: "4px 8px" }}>−</button>
+                    <span className="t-num" style={{ fontSize: 28, color: "var(--accent-orange)" }}>{tweaks.glassBlur || 28}px</span>
+                    <button onClick={() => adjustGlass(4)} style={{ fontSize: 14, padding: "4px 8px" }}>+</button>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>Animation intensity</div>
+                  <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>From restrained to maximalist.</div>
+                  <button onClick={cycleMotion} style={{ marginTop: 8 }}>
+                    <span className="t-display-italic" style={{ fontSize: 22, color: "var(--ink-2)", borderBottom: "1px dashed var(--ink-4)" }}>{tweaks.motion}</span>
+                  </button>
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>Navigation</div>
+                  <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>Dock, top navbar, or side rail.</div>
+                  <button onClick={cycleNav} style={{ marginTop: 8 }}>
+                    <span className="t-display-italic" style={{ fontSize: 22, color: "var(--ink-2)", borderBottom: "1px dashed var(--ink-4)" }}>{tweaks.nav}</span>
+                  </button>
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>Canvas mode</div>
+                  <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>Warm paper or mono.</div>
+                  <button onClick={toggleCanvas} style={{ marginTop: 8 }}>
+                    <span className="t-display-italic" style={{ fontSize: 22, color: "var(--ink-2)", borderBottom: "1px dashed var(--ink-4)", textTransform: "capitalize" }}>{tweaks.canvas}</span>
+                  </button>
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>Accent palette</div>
+                  <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>The warm color personality.</div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    {[accentColor.amber, accentColor.orange, accentColor.coral, accentColor.rose].map(c => (
+                      <div key={c} style={{ width: 24, height: 24, borderRadius: 999, background: c, boxShadow: "0 0 0 1.5px rgba(255,255,255,.7) inset, 0 2px 4px rgba(0,0,0,.15)" }}/>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </GlassCard>
+          )}
+
+          {activeSection === 'AI behavior' && (
+            <GlassCard>
+              <div className="t-cap">AI behavior</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 0, marginTop: 6 }}>
+                {[
+                  { label: "Voice", sub: "How present the AI feels in your day.", val: "Background — quietly observes, surfaces inline" },
+                  { label: "Auto-plan", sub: "AI rebalances your day when blocks slip.", val: "On · ask before moving > 30 min blocks" },
+                  { label: "Pages mood detection", sub: "Surface patterns from your journaling.", val: "On" },
+                  { label: "Relationship watcher", sub: "Notice contact warmth decay.", val: "On" },
+                ].map((row, i) => (
+                  <div key={i} style={{ padding: "14px 0", display: "grid", gridTemplateColumns: "200px 1fr auto", gap: 14, alignItems: "center", borderBottom: i < 3 ? "0.5px solid var(--ink-line)" : "none" }}>
+                    <div>
+                      <div style={{ fontSize: 13.5, fontWeight: 500 }}>{row.label}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>{row.sub}</div>
+                    </div>
+                    <div style={{ fontSize: 13, color: "var(--ink-2)" }}>{row.val}</div>
+                    <PaperButton small onClick={() => actions.addNotification({ text: `${row.label} setting toggled`, kind: 'info' })}>Toggle</PaperButton>
+                  </div>
+                ))}
+                <div className="hair" style={{ margin: "16px 0" }} />
+                <div style={{ padding: "14px 0" }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 500 }}>OpenRouter API Key</div>
+                  <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2, marginBottom: 10 }}>
+                    Get a free key at openrouter.ai/keys — enables real AI understanding for notes, chat, and summaries.
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input type="password" value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder="sk-or-v1-…"
+                      style={{ flex: 1, padding: "8px 12px", fontSize: 13, borderRadius: 8, border: "0.5px solid var(--ink-line)", background: "rgba(255,252,244,.7)", color: "var(--ink-1)", fontFamily: "var(--font-mono)" }}
+                    />
+                    <PaperButton small primary onClick={saveApiKey}>Save</PaperButton>
+                  </div>
+                </div>
+              </div>
+            </GlassCard>
+          )}
+
+          {(activeSection === 'Connected accounts' || activeSection === 'Devices' || activeSection === 'Notifications' || activeSection === 'Privacy' || activeSection === 'Keyboard' || activeSection === 'About') && (
+            <GlassCard>
+              <div className="t-cap">{activeSection}</div>
+              <div style={{ marginTop: 14, fontSize: 13.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
+                {activeSection === 'Connected accounts' && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {["Google Calendar", "iCloud", "Slack", "Linear", "Notion"].map(svc => (
+                      <div key={svc} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 10, background: "rgba(255,252,244,.5)", border: "0.5px solid rgba(26,20,16,.06)" }}>
+                        <span style={{ fontWeight: 500 }}>{svc}</span>
+                        <span style={{ fontSize: 11, color: "var(--ink-3)" }}>○ Not connected</span>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 10, background: "rgba(255,252,244,.5)", border: "0.5px solid rgba(26,20,16,.06)" }}>
+                      <div>
+                        <span style={{ fontWeight: 500 }}>Gmail</span>
+                        {gmailConnected && gmailEmail && <div style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 2 }}>{gmailEmail}</div>}
+                      </div>
+                      {gmailConnected ? (
+                        <PaperButton small onClick={handleDisconnectGmail}>Disconnect</PaperButton>
+                      ) : (
+                        <PaperButton small primary onClick={handleConnectGmail} disabled={gmailLoading}>
+                          {gmailLoading ? 'Connecting…' : 'Connect'}
+                        </PaperButton>
+                      )}
+                    </div>
+                    <PaperButton small style={{ marginTop: 8 }} onClick={() => actions.addNotification({ text: 'More integrations coming soon', kind: 'info' })}>Connect new account</PaperButton>
+                  </div>
+                )}
+                {activeSection === 'Devices' && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {(state.devices || []).map(d => (
+                      <div key={d.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 10, background: "rgba(255,252,244,.5)", border: "0.5px solid rgba(26,20,16,.06)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <Icon name={d.kind} size={16} color={d.online ? "var(--ink-1)" : "var(--ink-4)"} />
+                          <span style={{ fontWeight: 500 }}>{d.name}</span>
+                        </div>
+                        <span style={{ fontSize: 11, color: d.online ? "var(--ok)" : "var(--ink-4)" }}>{d.online ? 'Online' : 'Offline'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {activeSection === 'Notifications' && (
+                  <div>
+                    <p style={{ marginBottom: 12 }}>Browser notifications for reminders, focus timer, and due dates.</p>
+                    <PaperButton small onClick={handleRequestNotif} style={{ marginBottom: 12 }}>
+                      {notifStatus === 'granted' ? '✓ Notifications enabled' : notifStatus === 'denied' ? 'Notifications blocked' : 'Enable browser notifications'}
+                    </PaperButton>
+                    <div className="hair" style={{ margin: "12px 0" }} />
+                    <PaperButton small onClick={actions.clearNotifications}>Clear all in-app notifications</PaperButton>
+                  </div>
+                )}
+                {activeSection === 'Privacy' && <p>All data is stored locally. No data is sent to external servers except for AI features, which you can disable in AI behavior settings.</p>}
+                {activeSection === 'Keyboard' && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {[
+                      { key: '⌘K', action: 'Open command bar' },
+                      { key: 'Escape', action: 'Close modals / dialogs' },
+                      { key: '↑↓', action: 'Navigate lists' },
+                      { key: 'Enter', action: 'Confirm / select' },
+                    ].map(({ key, action }) => (
+                      <div key={key} style={{ display: "flex", gap: 16, alignItems: "center", padding: "6px 0" }}>
+                        <kbd style={{ fontFamily: "var(--font-mono)", fontSize: 11, padding: "3px 8px", borderRadius: 5, background: "rgba(26,20,16,.06)", color: "var(--ink-2)", minWidth: 48, textAlign: "center" }}>{key}</kbd>
+                        <span style={{ fontSize: 12.5 }}>{action}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {activeSection === 'About' && (
+                  <div>
+                    <p><strong>Build_PRO_MAX_1</strong> — B.0.0.1</p>
+                    <p>Paper × Liquid Glass design system. An execution OS for founders shipping product, fundraising, and hiring.</p>
+                    <p className="t-mono" style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 16 }}>
+                      {Object.keys(state).length} data entities · {state.tasks?.length || 0} tasks · {state.notes?.length || 0} notes · {state.contacts?.length || 0} contacts
+                    </p>
+                  </div>
+                )}
+                {activeSection === 'Account' && authUser && (
+                  <div>
+                    <GlassCard style={{ marginBottom: 16 }}>
+                      <div className="t-cap">Account info</div>
+                      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8, fontSize: 13.5, color: "var(--ink-1)" }}>
+                        <div><span style={{ color: "var(--ink-3)" }}>Email:</span> {authUser.email}</div>
+                        <div><span style={{ color: "var(--ink-3)" }}>Name:</span> {authUser.name || '—'}</div>
+                        <div><span style={{ color: "var(--ink-3)" }}>Timezone:</span> {user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}</div>
+                      </div>
+                    </GlassCard>
+                    <div style={{ display: "flex", gap: 12 }}>
+                      <PaperButton small onClick={handleLogout} style={{ background: "rgba(231,64,46,.1)", color: "var(--accent-coral)" }}>Sign out</PaperButton>
+                      <PaperButton small onClick={handleDeleteAccount} style={{ background: "rgba(231,64,46,.06)", color: "var(--accent-coral)" }}>Delete account</PaperButton>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </GlassCard>
+          )}
+        </div>
+      </div>
+    </ScreenShell>
+  );
+};
+
+const SettingRow = ({ label, sub, children }) => (
+  <div>
+    <div style={{ fontSize: 13, fontWeight: 500 }}>{label}</div>
+    <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>{sub}</div>
+    <div style={{ marginTop: 8 }}>{children}</div>
+  </div>
+);

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.trash/
+.vite/
+
+*.log
+.DS_Store
