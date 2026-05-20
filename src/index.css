@@ -966,3 +966,60 @@ body.focus-active .top-bar-awards {
 @media (hover: none) {
   .cursor-hint { display: none; }
 }
+
+/* ─── Mobile responsiveness ────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Prevent iOS zoom on input focus */
+  input, textarea, select, [contenteditable] {
+    font-size: 16px !important;
+  }
+
+  /* ScreenShell header scales down */
+  .screen-shell-title {
+    font-size: clamp(28px, 8vw, 48px) !important;
+  }
+
+  /* GlassCard padding tightens on small screens */
+  .glass-card {
+    padding: 16px !important;
+    border-radius: 16px !important;
+  }
+
+  /* Chips wrap nicely */
+  .chip {
+    font-size: 10px !important;
+    padding: 3px 8px !important;
+  }
+
+  /* Better touch targets for buttons */
+  button {
+    min-height: 36px;
+    min-width: 36px;
+  }
+
+  /* Notes editor padding reduced */
+  .notes-doc-padding {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+
+  /* Scrollable rows on mobile */
+  .scroll {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Calendar, Dashboard grids go single column */
+  .responsive-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Tightest screens: reduce ScreenShell gap */
+  .screen-shell-header {
+    margin-bottom: 16px !important;
+  }
+  .screen-shell-title {
+    font-size: 26px !important;
+  }
+}

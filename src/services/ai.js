@@ -42,7 +42,20 @@ function buildSystemPrompt(context, extra = '') {
   const autoPlan = personality.autoPlan !== false;
   const moodDetection = personality.moodDetection !== false;
   const relWatcher = personality.relWatcher !== false;
+
+  const envMode = context?.tweaks?.environmentMode || 'normal';
+  const modeRules = {
+    learning: '\n- The user is in learning mode. Act as a Socratic tutor: explain concepts, ask probing questions, suggest practice exercises. Prioritize teaching over task management.',
+    rest: '\n- The user is resting. Keep responses minimal and calming. Do not suggest new tasks or stressful topics unless urgent.',
+    focus: '\n- The user is in deep focus. Responses must be ultra-brief. Only interrupt for critical items.',
+    sickness: '\n- The user is unwell. Be gentle. Suggest postponing non-essential work. Prioritize health over productivity.',
+    shelter: '\n- The user needs space. Reduce cognitive load. Suggest easy wins only if they ask.',
+    redirect: '\n- The user needs momentum. Suggest quick wins and energizing tasks to rebuild focus.',
+    offline: '\n- The user is away. Keep any generated responses brief for when they return.',
+  };
+
   let behaviorRules = '';
+  if (modeRules[envMode]) behaviorRules += modeRules[envMode];
   if (autoPlan) behaviorRules += '\n- Proactively suggest schedule adjustments when tasks slip or conflicts arise.';
   if (moodDetection) behaviorRules += '\n- Pay attention to the user\'s emotional tone. If they seem stressed or overwhelmed, suggest breaks or reprioritization.';
   if (relWatcher) behaviorRules += '\n- Notice when contacts haven\'t been interacted with recently and suggest reaching out.';

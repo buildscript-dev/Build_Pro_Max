@@ -17,6 +17,26 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      // Merge with fresh defaults to fill in any missing fields (e.g. new env fields)
+      const defaults = freshState();
+      const merged = {
+        ...defaults,
+        ...parsed,
+        today: { ...defaults.today, ...parsed.today },
+        tweaks: { ...defaults.tweaks, ...parsed.tweaks },
+        tasks: parsed.tasks || defaults.tasks,
+        notes: parsed.notes || defaults.notes,
+        events: parsed.events || defaults.events,
+        contacts: parsed.contacts || defaults.contacts,
+        files: parsed.files || defaults.files,
+        devices: parsed.devices || defaults.devices,
+        reminders: parsed.reminders || defaults.reminders,
+        aiSuggestions: parsed.aiSuggestions || defaults.aiSuggestions,
+        goals: parsed.goals || defaults.goals,
+        schedule: parsed.schedule || defaults.schedule,
+        chatMessages: parsed.chatMessages || defaults.chatMessages,
+        notifications: parsed.notifications || defaults.notifications,
+      };
       // ensure today/weekOf is updated
       const now = new Date();
       const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -25,12 +45,12 @@ function loadState() {
       const month = months[now.getMonth()];
       const date = now.getDate();
       const weekNum = getWeekNumber(now);
-      parsed.today = {
-        ...parsed.today,
+      merged.today = {
+        ...merged.today,
         date: `${dow}, ${month} ${date}`,
         weekOf: `Week ${weekNum} · ${month} ${date}–${date+6}`,
       };
-      return parsed;
+      return merged;
     }
   } catch (e) { /* ignore */ }
   return null;
@@ -89,7 +109,6 @@ function freshState() {
     nextTaskId: 9,
     nextEventId: 12,
     nextContactId: 9,
-    environmentMode: 'normal',
     automationEnabled: false,
     auditLog: [],
     automationFeedback: [],
@@ -218,7 +237,8 @@ function reducer(state, action) {
 
     // ─── Notes ───
     case 'ADD_NOTE': {
-      const id = action.payload?.id || `n${state.nextNoteId}`;
+      const explicitId = action.payload?.id;
+      const id = explicitId || `n${state.nextNoteId}`;
       const newNote = {
         title: 'Untitled',
         tag: 'General',
@@ -234,7 +254,8 @@ function reducer(state, action) {
         ...action.payload,
         id,
       };
-      return { ...state, notes: [newNote, ...state.notes], nextNoteId: state.nextNoteId + 1 };
+      const nextId = explicitId ? state.nextNoteId : state.nextNoteId + 1;
+      return { ...state, notes: [newNote, ...state.notes], nextNoteId: nextId };
     }
     case 'UPDATE_NOTE': {
       const notes = state.notes.map(n => n.id === action.payload.id ? {
@@ -382,9 +403,6 @@ function reducer(state, action) {
     }
 
     // ─── Environment / AI Automation ───
-    case 'SET_ENVIRONMENT_MODE': {
-      return { ...state, environmentMode: action.payload };
-    }
     case 'SET_AUTOMATION_ENABLED': {
       return { ...state, automationEnabled: action.payload };
     }
@@ -590,7 +608,6 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
     setAiSuggestions: (data) => dispatch({ type: 'SET_AI_SUGGESTIONS', payload: data }),
 
     // Environment / AI Automation
-    setEnvironmentMode: (mode) => dispatch({ type: 'SET_ENVIRONMENT_MODE', payload: mode }),
     setAutomationEnabled: (bool) => dispatch({ type: 'SET_AUTOMATION_ENABLED', payload: bool }),
     addAuditLog: (entry) => dispatch({ type: 'ADD_AUDIT_LOG', payload: entry }),
     addAutomationFeedback: (feedback) => dispatch({ type: 'ADD_AUTOMATION_FEEDBACK', payload: feedback }),

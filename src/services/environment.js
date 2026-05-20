@@ -366,6 +366,7 @@ export function extractEventsAndReminders(text) {
     results.reminders.push({
       title: `🔔 ${activity}`,
       time: fullTime,
+      day: targetDay,
       kind: 'ai-extracted',
     });
 
@@ -485,7 +486,9 @@ export function extractLearningItems(text) {
 }
 
 export function generateLearningNote(learningItems, topic = '') {
-  const title = topic || `Learning Session — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const title = topic ? `${topic} (${timeStr})` : `Learning Session — ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${timeStr}`;
   const contentParts = [];
 
   if (learningItems.concepts.length > 0) {

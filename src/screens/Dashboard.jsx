@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { GlassCard, PaperButton, Avatar, Icon, AiOrb } from '../components/ui/Icons';
+import { EnvironmentBadge } from '../components/ui/EnvironmentBadge';
 import { accentColor } from '../data';
 import { useApp } from '../store/AppContext';
 import { formatTime, formatDate, sendNotification, getGreeting } from '../services/clock';
@@ -364,10 +365,23 @@ const ExpandedCard = ({ card, data, onClose, onNavigate, actions }) => {
 // ─── Card Implementations ───
 
 function HelloCard({ data, expanded, accent }) {
+  const mode = data?.tweaks?.environmentMode;
+  const envGreeting = mode === 'learning' ? '📖 In a learning flow'
+    : mode === 'rest' ? '🌙 Take it easy today'
+    : mode === 'focus' ? '🎯 Locked in'
+    : mode === 'sickness' ? '🤒 Hope you feel better'
+    : mode === 'shelter' ? '🛡️ Taking space'
+    : mode === 'redirect' ? '🔄 Finding momentum'
+    : mode === 'offline' ? '🔕 Off the grid'
+    : null;
+
   return (
     <div style={{ padding: expanded ? 0 : 24, height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
       <div>
-        <div className="t-cap" style={{ color: accent }}>Today's big rock</div>
+        <div className="t-cap" style={{ color: accent }}>
+          {envGreeting || "Today's big rock"}
+          {mode && mode !== 'normal' && <EnvironmentBadge mode={mode} style={{ marginLeft: 8 }} />}
+        </div>
         <div className="t-display" style={{ fontSize: expanded ? 44 : 26, fontWeight: 400, lineHeight: 1.15, marginTop: 8, letterSpacing: "-0.015em" }}>
           {data.today.bigRock}
         </div>
