@@ -5,25 +5,7 @@ import { useApp } from '../store/AppContext';
 import { generateAiResponse } from '../services/ai';
 import { formatDate, getCurrentTime } from '../services/clock';
 import { ScreenGuide } from '../components/ui/ScreenGuide';
-
-const ScreenShell = ({ title, eyebrow, subtitle, right, children, padTop = 86, padBottom = 110 }) => (
-  <div className="screen-shell scroll" style={{
-    position: "absolute", inset: 0, paddingTop: padTop, paddingBottom: padBottom,
-    paddingLeft: 36, paddingRight: 36, overflowY: "auto",
-  }}>
-    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 28, paddingLeft: 6, paddingRight: 6 }}>
-      <div>
-        {eyebrow && <div className="t-cap" style={{ marginBottom: 8, color: "var(--accent-orange)" }}>{eyebrow}</div>}
-        <h1 className="t-display" style={{ margin: 0, fontSize: 52, fontWeight: 400, letterSpacing: "-0.025em", lineHeight: 1.02 }}>
-          {title}
-        </h1>
-        {subtitle && <div style={{ marginTop: 10, fontSize: 14, color: "var(--ink-2)", maxWidth: 720 }}>{subtitle}</div>}
-      </div>
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>{right}</div>
-    </div>
-    {children}
-  </div>
-);
+import { ScreenShell } from '../components/ui/ScreenShell';
 
 const TRACK_TEMPLATES = [
   { name: "Fundraise", color: "coral",  blocks: [{ d: 0, w: 2, label: "Deck pass" }, { d: 3, w: 1, label: "Bessemer follow-up · memo" }, { d: 4, w: 2, label: "Partner mtgs · 3" }] },

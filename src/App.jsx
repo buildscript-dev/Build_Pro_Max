@@ -10,7 +10,6 @@ import { logout } from './store/auth';
 import { AmbientVideo } from './components/effects/AmbientVideo';
 import { PageTransition } from './components/effects/PageTransition';
 import { FocusPanel } from './components/focus/FocusPanel';
-import { FocusToggle } from './components/focus/FocusToggle';
 
 const AiChat = lazy(() => import('./screens/AiChat').then(m => ({ default: m.AiChat })));
 const Calendar = lazy(() => import('./screens/Calendar').then(m => ({ default: m.Calendar })));
@@ -85,6 +84,7 @@ export default function App() {
     if (authUser && state.user) {
       const initials = authUser.name ? authUser.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : authUser.email[0].toUpperCase();
       actions.updateUser({
+        id: authUser.id,
         name: authUser.name || authUser.email.split('@')[0],
         email: authUser.email,
         avatar: initials,

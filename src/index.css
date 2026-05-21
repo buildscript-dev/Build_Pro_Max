@@ -845,18 +845,19 @@ body.focus-active .top-bar-awards {
 
   /* TopBar: simplify */
   .top-bar-awards {
-    height: 52px !important;
+    height: 48px !important;
     padding-left: 12px !important;
     padding-right: 8px !important;
     left: 10px !important;
     right: 10px !important;
     top: 10px !important;
+    gap: 8px !important;
   }
 
-  /* Hide search bar text on mobile, keep icon */
-  .top-bar-awards button span:not(:first-child) { display: none; }
-  .top-bar-awards .chip { display: none !important; }
-  .top-bar-awards > div[style*="flex-direction: column"] { display: none !important; }
+  /* Hide labels and chips on mobile, keep icons + avatar */
+  .top-bar-awards .topbar-search-text { display: none !important; }
+  .top-bar-awards .topbar-chip { display: none !important; }
+  .top-bar-awards .topbar-user-text { display: none !important; }
 
   /* Touch-friendly: minimum 44px touch targets */
   button {

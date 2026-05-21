@@ -16,45 +16,17 @@ function getWeekNumber(d) {
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      // Merge with fresh defaults to fill in any missing fields (e.g. new env fields)
-      const defaults = freshState();
-      const merged = {
-        ...defaults,
-        ...parsed,
-        today: { ...defaults.today, ...parsed.today },
-        tweaks: { ...defaults.tweaks, ...parsed.tweaks },
-        tasks: parsed.tasks || defaults.tasks,
-        notes: parsed.notes || defaults.notes,
-        events: parsed.events || defaults.events,
-        contacts: parsed.contacts || defaults.contacts,
-        files: parsed.files || defaults.files,
-        devices: parsed.devices || defaults.devices,
-        reminders: parsed.reminders || defaults.reminders,
-        aiSuggestions: parsed.aiSuggestions || defaults.aiSuggestions,
-        goals: parsed.goals || defaults.goals,
-        schedule: parsed.schedule || defaults.schedule,
-        chatMessages: parsed.chatMessages || defaults.chatMessages,
-        notifications: parsed.notifications || defaults.notifications,
-      };
-      // ensure today/weekOf is updated
-      const now = new Date();
-      const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      const dow = days[now.getDay()];
-      const month = months[now.getMonth()];
-      const date = now.getDate();
-      const weekNum = getWeekNumber(now);
-      merged.today = {
-        ...merged.today,
-        date: `${dow}, ${month} ${date}`,
-        weekOf: `Week ${weekNum} · ${month} ${date}–${date+6}`,
-      };
-      return merged;
-    }
-  } catch (e) { /* ignore */ }
-  return null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const defaults = freshState();
+    const fresh = initialToday();
+    return {
+      ...defaults,
+      ...parsed,
+      today: { ...defaults.today, ...parsed.today, date: fresh.date, weekOf: fresh.weekOf },
+      tweaks: { ...defaults.tweaks, ...parsed.tweaks },
+    };
+  } catch { return null; }
 }
 
 const initialToday = () => {
@@ -70,19 +42,20 @@ const initialToday = () => {
 };
 
 function freshState() {
+  const seed = (arr) => (arr || []).map(item => ({ ...item }));
   return {
     user: { ...initialData.user },
     today: initialToday(),
-    tasks: initialData.tasks.map(t => ({ ...t })),
-    notes: initialData.notes.map(n => ({ ...n })),
-    events: initialData.events.map(e => ({ ...e })),
-    contacts: initialData.contacts.map(c => ({ ...c })),
-    files: initialData.files.map(f => ({ ...f })),
-    devices: initialData.devices.map(d => ({ ...d })),
-    reminders: initialData.reminders.map(r => ({ ...r })),
-    aiSuggestions: initialData.aiSuggestions.map(s => ({ ...s })),
-    goals: initialData.goals.map(g => ({ ...g })),
-    schedule: initialData.schedule.map(s => ({ ...s })),
+    tasks: seed(initialData.tasks),
+    notes: seed(initialData.notes),
+    events: seed(initialData.events),
+    contacts: seed(initialData.contacts),
+    files: seed(initialData.files),
+    devices: seed(initialData.devices),
+    reminders: seed(initialData.reminders),
+    aiSuggestions: seed(initialData.aiSuggestions),
+    goals: seed(initialData.goals),
+    schedule: seed(initialData.schedule),
     chatMessages: [
       { id: 'm1', role: 'ai', text: 'Welcome. I am your environment engine. How can I help you today?', time: Date.now() },
     ],
@@ -612,7 +585,13 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
     addTask: (data) => { dispatch({ type: 'ADD_TASK', payload: data }); if (authUser) syncToSupabase('tasks', data); },
     updateTask: (data) => { dispatch({ type: 'UPDATE_TASK', payload: data }); if (authUser) syncToSupabase('tasks', data); },
     deleteTask: (id) => { dispatch({ type: 'DELETE_TASK', payload: id }); if (authUser) deleteFromSupabase('tasks', id); },
-    toggleTask: (id) => { dispatch({ type: 'TOGGLE_TASK', payload: id }); if (authUser) syncToSupabase('tasks', { id, status: 'toggled' }); /* Note: simplified toggle sync, ideally full object is synced */ },
+    toggleTask: (id) => {
+      dispatch({ type: 'TOGGLE_TASK', payload: id });
+      if (authUser) {
+        const task = stateRef.current.tasks.find(t => t.id === id);
+        if (task) syncToSupabase('tasks', { ...task, status: task.status === 'done' ? 'todo' : 'done' });
+      }
+    },
     reorderTasks: (tasks) => { dispatch({ type: 'REORDER_TASKS', payload: tasks }); if (authUser) syncToSupabase('tasks', tasks); },
 
     // Notes
@@ -634,7 +613,13 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
     // Files — accept id or name for progress/remove
     addFile: (data) => { dispatch({ type: 'ADD_FILE', payload: data }); if (authUser) syncToSupabase('files', data); },
     updateFileProgress: (idOrName, progress) => dispatch({ type: 'UPDATE_FILE_PROGRESS', payload: { id: idOrName, name: idOrName, progress } }),
-    removeFile: (idOrName) => { dispatch({ type: 'REMOVE_FILE', payload: idOrName }); if (authUser) deleteFromSupabase('files', idOrName); },
+    removeFile: (idOrName) => {
+      dispatch({ type: 'REMOVE_FILE', payload: idOrName });
+      if (authUser) {
+        const file = stateRef.current.files.find(f => f.id === idOrName || f.name === idOrName);
+        if (file?.id) deleteFromSupabase('files', file.id);
+      }
+    },
 
     // Schedule
     addScheduleBlock: (data) => { dispatch({ type: 'ADD_SCHEDULE_BLOCK', payload: data }); if (authUser) syncToSupabase('schedule', data); },

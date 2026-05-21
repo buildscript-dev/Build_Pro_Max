@@ -8,7 +8,7 @@ const FILE_KINDS = ['pdf', 'fig', 'sheet', 'img', 'audio'];
 const DEVICE_NAMES = ['MacBook Pro', 'iPhone 15', 'iPad Pro', 'Studio (Mac mini)'];
 
 export const Files = () => {
-  const { state, actions } = useApp();
+  const { state, actions, authUser } = useApp();
   const files = state.files || [];
   const devices = state.devices || [];
   const [showAdd, setShowAdd] = useState(false);
@@ -38,7 +38,11 @@ export const Files = () => {
   const handleFileSelect = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+    if (!authUser?.id) {
+      actions.addNotification({ text: 'Sign in to upload files to the cloud.', kind: 'warning' });
+      return;
+    }
+
     setIsUploading(true);
     const tempId = `temp_${Date.now()}`;
     const ext = file.name.split('.').pop().toLowerCase();
@@ -52,9 +56,9 @@ export const Files = () => {
 
     actions.addFile({ id: tempId, name: file.name, from: 'This device', to: 'Cloud', size: fileSizeMB, kind, progress: 0 });
     actions.addNotification({ text: `Uploading: "${file.name}"`, kind: 'info' });
-    
+
     // Upload to Supabase Storage
-    const result = await uploadFile(file, state.user.id);
+    const result = await uploadFile(file, authUser.id);
     
     if (result.ok) {
       actions.removeFile(tempId);

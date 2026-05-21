@@ -54,12 +54,11 @@ export async function fetchFromSupabase(tableName, userId) {
 }
 
 export async function fetchAllFromSupabase(userId) {
-  const results = {};
-  for (const table of TABLES) {
-    const result = await fetchFromSupabase(table, userId);
-    results[table] = result.data || [];
-  }
-  return results;
+  const settled = await Promise.all(TABLES.map(t => fetchFromSupabase(t, userId)));
+  return TABLES.reduce((acc, table, i) => {
+    acc[table] = settled[i].data || [];
+    return acc;
+  }, {});
 }
 
 export async function uploadFile(file, userId) {
@@ -110,22 +109,16 @@ export async function listUserFiles(userId) {
 
 export function subscribeToAll(userId, onDatabaseChange) {
   if (!userId) return () => {};
-  
+
   const channel = supabase
-    .channel('all_tables_changes')
+    .channel(`user_changes_${userId}`)
     .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
-      // payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE', table, new, old }
       const record = payload.new || payload.old;
-      // Basic client-side check to ensure we only react to our own data
-      if (record && record.user_id === userId) {
+      if (record?.user_id === userId) {
         onDatabaseChange(payload.table, payload.eventType, payload.new, payload.old);
       }
     })
-    .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        console.log('Realtime Connected');
-      }
-    });
+    .subscribe();
 
   return () => {
     supabase.removeChannel(channel);

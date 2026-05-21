@@ -6,7 +6,14 @@
       "Bash(xargs cat)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(sed 's/=.*$/=<redacted>/')",
+      "Bash(timeout 90 npx vite build)",
+      "Bash(timeout 60 npx vite build)",
+      "Bash(timeout 8 npx vite --port 4173)",
+      "Bash(npx vite *)",
+      "Read(//tmp/**)",
+      "Bash(kill %1)"
     ]
   }
 }
