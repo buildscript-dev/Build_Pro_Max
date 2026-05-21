@@ -147,7 +147,7 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
             fontWeight: 400, color: "var(--ink-1)",
             letterSpacing: "-0.025em", lineHeight: 1.02
           }}>
-            {greeting}, <span className="t-display-italic" style={{ color: "var(--accent-orange)" }}>Build</span>.
+            {greeting}, <span className="t-display-italic" style={{ color: "var(--accent-orange)" }}>{D.user?.name?.split(' ')[0] || "User"}</span>.
             {focusActive && <span style={{ fontSize: 'clamp(13px, 1.8vw, 18px)', marginLeft: 'clamp(8px, 1.6vw, 16px)', color: "var(--accent-coral)" }}>Focus · {formatTimer(focusRemaining)}</span>}
           </h1>
           <div style={{ marginTop: 8, fontSize: 'clamp(12px, 1.4vw, 14px)', color: "var(--ink-2)", maxWidth: 640 }}>

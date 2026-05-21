@@ -14,7 +14,12 @@
       "Bash(npx vite *)",
       "Read(//tmp/**)",
       "Bash(kill %1)",
-      "Bash(echo \"Server PID: $!\")"
+      "Bash(echo \"Server PID: $!\")",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(/home/build_script/.cache/ms-playwright/chromium-1223/chrome-linux64/chrome --version)",
+      "Bash(curl -sf http://localhost:5173)",
+      "Bash(awk '/\\\\.mobile-bottom-nav[^-]/{p=1} p{print NR\": \"$0; if\\(/}$/\\){p=0;exit}}' /home/build_script/Build_Vault/Build_PRO_MAX_1/src/index.css)",
+      "Bash(pkill -f \"vite --port 5173\")"
     ]
   }
 }
