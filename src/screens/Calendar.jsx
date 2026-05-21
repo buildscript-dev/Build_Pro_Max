@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb } from '../components/ui/Icons';
 import { accentColor } from '../data';
-import { useApp } from '../store/AppContext';
+import { useAppState, useAppActions } from '../store/AppContext';
 import { ScreenShell } from '../components/ui/ScreenShell';
 
 const COLORS = ['amber', 'orange', 'coral', 'rose'];
@@ -31,8 +31,8 @@ function createDatedEvent(base, date) {
 }
 
 export const Calendar = () => {
-  const { state, actions } = useApp();
-  const events = state.events || [];
+  const { actions } = useAppActions();
+  const events = useAppState((s) => s.events) || [];
   const now = new Date();
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
   const [currentYear, setCurrentYear] = useState(now.getFullYear());

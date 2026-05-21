@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb } from '../components/ui/Icons';
-import { useApp } from '../store/AppContext';
+import { useAppState, useAppActions, useAppStore } from '../store/AppContext';
 import { ScreenShell } from '../components/ui/ScreenShell';
 import { uploadFile, deleteFile } from '../services/supabaseDb';
 
@@ -8,9 +8,10 @@ const FILE_KINDS = ['pdf', 'fig', 'sheet', 'img', 'audio'];
 const DEVICE_NAMES = ['MacBook Pro', 'iPhone 15', 'iPad Pro', 'Studio (Mac mini)'];
 
 export const Files = () => {
-  const { state, actions, authUser } = useApp();
-  const files = state.files || [];
-  const devices = state.devices || [];
+  const { actions, authUser } = useAppActions();
+  const store = useAppStore();
+  const files = useAppState((s) => s.files) || [];
+  const devices = useAppState((s) => s.devices) || [];
   const [showAdd, setShowAdd] = useState(false);
   const [newFile, setNewFile] = useState({ name: '', from: DEVICE_NAMES[0], to: DEVICE_NAMES[1], size: '1 MB', kind: 'pdf' });
   const filesRef = useRef(files);
@@ -93,7 +94,7 @@ export const Files = () => {
     const memo = files.find(f => f.name.toLowerCase().includes('memo') || f.kind === 'pdf');
     if (memo) {
       const now = new Date();
-      const target = state.events?.find(e => e.time === '14:30' || /bessemer|memo|follow/i.test(e.title || ''));
+      const target = store.getSnapshot().events?.find(e => e.time === '14:30' || /bessemer|memo|follow/i.test(e.title || ''));
       if (target) {
         actions.updateEvent({ ...target, attachment: memo.id || memo.name, attachmentName: memo.name });
       } else {

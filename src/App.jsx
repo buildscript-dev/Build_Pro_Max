@@ -1,5 +1,5 @@
 import React, { useEffect, useState, lazy, Suspense, useRef, useCallback, useMemo } from 'react';
-import { useApp } from './store/AppContext';
+import { useAppState, useAppActions } from './store/AppContext';
 import { CmdK } from './components/command/CmdK';
 import { Dock, TopBar } from './components/navigation/Dock';
 import { BottomNav } from './components/navigation/BottomNav';
@@ -60,7 +60,11 @@ function BootSplash() {
 }
 
 export default function App() {
-  const { state, actions, bootDone, authUser, setAuthUser, onLogout } = useApp();
+  const { actions, bootDone, authUser, setAuthUser, onLogout } = useAppActions();
+  const t = useAppState((s) => s.tweaks);
+  const user = useAppState((s) => s.user);
+  const today = useAppState((s) => s.today);
+  const notifications = useAppState((s) => s.notifications);
   const [showAuth, setShowAuth] = useState(!authUser);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [screen, setScreen] = useState('dashboard');
@@ -78,10 +82,8 @@ export default function App() {
     if (authUser) setShowAuth(false);
   }, [authUser]);
 
-  const t = state.tweaks;
-
   useEffect(() => {
-    if (authUser && state.user) {
+    if (authUser && user) {
       const initials = authUser.name ? authUser.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : authUser.email[0].toUpperCase();
       actions.updateUser({
         id: authUser.id,
@@ -202,7 +204,7 @@ export default function App() {
     return () => el.removeEventListener('scroll', onScroll, { capture: true });
   }, [screen]);
 
-  const hasNotifications = state.notifications?.some(n => !n.read);
+  const hasNotifications = useAppState((s) => s.notifications?.some(n => !n.read) || false);
 
   const isAuthConnected = !!authUser;
 
@@ -275,8 +277,8 @@ export default function App() {
 
       {t.focusMode !== 'execution' && (
         <TopBar
-          user={state.user}
-          today={state.today}
+          user={user}
+          today={today}
           onOpenCmdK={() => setCmdkOpen(true)}
           variant={t.nav}
           active={screen}
@@ -284,7 +286,7 @@ export default function App() {
           hasNotifications={hasNotifications}
           onClearNotifications={actions.clearNotifications}
           onMarkAllRead={actions.markAllNotificationsRead}
-          notifications={state.notifications}
+          notifications={notifications}
           scrolled={topBarScrolled}
         />
       )}

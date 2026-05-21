@@ -176,7 +176,7 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
         </div>
       </div>
 
-      <div style={{
+      <div className="bento-grid" style={{
         display: "grid",
         gridTemplateColumns: "repeat(4, 1fr)",
         gridAutoRows: "minmax(160px, auto)",
@@ -281,6 +281,7 @@ const DraggableBentoCard = React.memo(({ card, data, containerRef, onExpand, onC
   return (
     <div
       ref={ref}
+      className="bento-card"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

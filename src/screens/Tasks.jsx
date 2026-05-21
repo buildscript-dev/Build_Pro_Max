@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb } from '../components/ui/Icons';
-import { useApp } from '../store/AppContext';
+import { useAppState, useAppActions, useAppStore } from '../store/AppContext';
 import { generateAiResponse } from '../services/ai';
 import { ScreenShell } from '../components/ui/ScreenShell';
 
@@ -17,7 +17,8 @@ const RECUR_OPTIONS = [
 ];
 
 export const Tasks = () => {
-  const { state, actions } = useApp();
+  const { actions } = useAppActions();
+  const store = useAppStore();
   const [filter, setFilter] = useState('all');
   const [sortBy, setSortBy] = useState('default');
   const [showAdd, setShowAdd] = useState(false);
@@ -28,7 +29,7 @@ export const Tasks = () => {
   const [expandedSubtasks, setExpandedSubtasks] = useState({});
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
-  const tasks = state.tasks || [];
+  const tasks = useAppState((s) => s.tasks) || [];
 
   const filtered = useMemo(() => {
     let result = tasks.filter(t => {
@@ -128,10 +129,10 @@ export const Tasks = () => {
   const askAi = useCallback(async () => {
     setAiLoading(true);
     const prompt = `Analyze my task list. I have ${tasks.length} total tasks, ${tasks.filter(t => t.status !== 'done').length} open, ${getSnoozedCount()} overdue. P0s: ${tasks.filter(t => t.priority === 'P0' && t.status !== 'done').map(t => t.title).join(', ')}. Give me 1-2 sentences of actionable advice.`;
-    const response = await generateAiResponse(prompt, state);
+    const response = await generateAiResponse(prompt, store.getSnapshot());
     setAiAdvice(response);
     setAiLoading(false);
-  }, [tasks, state]);
+  }, [tasks, store]);
 
   const toggleSubtask = (taskId, subIdx) => {
     const task = tasks.find(t => t.id === taskId);

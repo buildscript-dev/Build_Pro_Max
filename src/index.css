@@ -817,15 +817,44 @@ body.focus-active .top-bar-awards {
     grid-auto-rows: minmax(160px, auto) !important;
   }
 
-  /* All grids become single column */
+  /* Dashboard cards: collapse to a single column on mobile. Use the explicit
+     .bento-grid / .bento-card classes so we beat any inline grid-column
+     value (which would otherwise create an implicit second column). */
+  .bento-grid {
+    grid-template-columns: 1fr !important;
+    grid-auto-flow: row !important;
+    grid-auto-rows: minmax(140px, auto) !important;
+  }
+  .bento-grid .bento-card {
+    grid-column: 1 / -1 !important;
+    grid-row: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* All major two-pane / multi-column grids become a single column */
   div[style*="grid-template-columns: 1fr 320px"],
   div[style*="grid-template-columns: 320px 1fr"],
   div[style*="grid-template-columns: 1fr 480px"],
   div[style*="grid-template-columns: 260px 1fr"],
   div[style*="grid-template-columns: 1.6fr 1fr"],
+  div[style*="grid-template-columns: 1fr 1fr"],
   div[style*="grid-template-columns: repeat(4, 1fr)"],
+  div[style*="grid-template-columns: repeat(3, 1fr)"],
   div[style*="grid-template-columns: repeat(2, 1fr)"] {
     grid-template-columns: 1fr !important;
+  }
+
+  /* Settings → AI behavior rows: "200px 1fr auto" label/value/button.
+     Stack label over the value+button so the 200px column can't squeeze. */
+  div[style*="grid-template-columns: 200px 1fr auto"] {
+    grid-template-columns: 1fr auto !important;
+    gap: 8px !important;
+  }
+  div[style*="grid-template-columns: 200px 1fr auto"] > div:nth-child(2) {
+    grid-column: 1 / -1 !important;
+    order: 3;
   }
 
   /* Notes: 3-column becomes single */
@@ -833,9 +862,14 @@ body.focus-active .top-bar-awards {
     grid-template-columns: 1fr !important;
   }
 
-  /* Show bottom nav on mobile, hide dock */
+  /* Show bottom nav on mobile, hide desktop dock */
   .mobile-bottom-nav {
     display: flex !important;
+  }
+  .mobile-bottom-nav .mobile-dock-btn,
+  .mobile-bottom-nav .mobile-dock-divider {
+    /* ensure spacing inside the floating dock */
+    flex-shrink: 0;
   }
 
   /* Hide desktop dock on mobile */
@@ -1317,5 +1351,169 @@ body.focus-active .top-bar-awards {
   }
   .screen-shell-title {
     font-size: 26px !important;
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════
+   MOBILE — dashboard card overflow fixes + fluid typography
+   These rules fire below 768px and target the dashboard cards.
+   ═════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* ---- Bento cards: full width, content stays inside ---- */
+  [data-screen-label*="dashboard"] [style*="grid-column"] {
+    width: 100% !important;
+  }
+
+  /* The GlassCard wrapper inside each draggable card — kill any min-width
+     that might be inherited from the desktop pad / max-width. */
+  [data-screen-label*="dashboard"] [style*="grid-column"] > .glass,
+  [data-screen-label*="dashboard"] [style*="grid-column"] .glass-pane {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden;
+  }
+
+  /* ---- Chip / header rows wrap instead of overflowing ---- */
+  /* HelloCard: chips + weather row. Forces flex-wrap so "Clear skies"
+     drops to a new line instead of being cut off on the right. */
+  [data-screen-label*="dashboard"] [style*="flex-wrap: wrap"] {
+    row-gap: 6px;
+  }
+
+  /* ScheduleCard header: title block + NOW chip. Stack vertically on
+     narrow screens so the NOW chip doesn't sit on top of the title. */
+  [data-screen-label*="dashboard"] [style*="align-items: baseline"][style*="justify-content: space-between"] {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    row-gap: 8px !important;
+  }
+  [data-screen-label*="dashboard"] [style*="align-items: baseline"][style*="justify-content: space-between"] > div:first-child {
+    min-width: 0 !important;
+    flex: 1 1 100% !important;
+  }
+  [data-screen-label*="dashboard"] [style*="align-items: baseline"][style*="justify-content: space-between"] > .chip {
+    flex-shrink: 0;
+  }
+
+  /* FocusCard: keep "/ 240 goal" beside the big number, don't wrap awkward */
+  [data-screen-label*="dashboard"] [style*="align-items: flex-end"][style*="gap: 12"] {
+    flex-wrap: nowrap !important;
+    min-width: 0 !important;
+  }
+  [data-screen-label*="dashboard"] [style*="align-items: flex-end"][style*="gap: 12"] > span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ---- Fluid clamp() typography across the dashboard ---- */
+  /* Card titles (the .t-display inside cards) — was 22/26/32 raw px */
+  [data-screen-label*="dashboard"] .glass .t-display {
+    font-size: clamp(18px, 5.2vw, 22px) !important;
+    line-height: 1.18 !important;
+  }
+  /* Big numbers (.t-num) — 56/72/92/110 inline */
+  [data-screen-label*="dashboard"] .glass .t-num {
+    font-size: clamp(40px, 14vw, 64px) !important;
+    line-height: 0.95 !important;
+  }
+  /* Card body text */
+  [data-screen-label*="dashboard"] .glass {
+    font-size: clamp(11.5px, 3.4vw, 13px);
+  }
+  /* Tiny caps labels (POINTS · TODAY etc.) */
+  [data-screen-label*="dashboard"] .glass .t-cap {
+    font-size: clamp(9px, 2.6vw, 10px) !important;
+  }
+  /* The chip "/ 240 goal" suffix near the big number */
+  [data-screen-label*="dashboard"] .glass [style*="font-size: 14"] {
+    font-size: clamp(11px, 3vw, 14px) !important;
+  }
+
+  /* ---- Floating mobile dock (mirrors desktop dock styling) ---- */
+  .mobile-bottom-nav {
+    position: fixed !important;
+    left: 50% !important;
+    right: auto !important;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px)) !important;
+    transform: translateX(-50%) !important;
+    z-index: 50;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    background: rgba(255, 252, 244, 0.55) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    backdrop-filter: blur(28px) saturate(180%);
+    border: 0.5px solid rgba(255, 255, 255, 0.7);
+    border-radius: 22px !important;
+    box-shadow:
+      0 2px 1px rgba(255, 255, 255, 0.9) inset,
+      0 -1px 1px rgba(0, 0, 0, 0.05) inset,
+      0 24px 60px -10px rgba(46, 30, 12, 0.30),
+      0 8px 24px -8px rgba(46, 30, 12, 0.18);
+    max-width: calc(100vw - 20px);
+  }
+  .mobile-bottom-nav .mobile-dock-btn {
+    all: unset;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: transform 200ms var(--ease-snap), background 200ms ease;
+  }
+  .mobile-bottom-nav .mobile-dock-btn:active {
+    transform: scale(0.92);
+  }
+  .mobile-bottom-nav .mobile-dock-cmdk {
+    background: rgba(26, 20, 16, 0.86) !important;
+    color: #fff8e8;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.10) inset, 0 4px 10px -2px rgba(0, 0, 0, 0.30);
+  }
+  .mobile-bottom-nav .mobile-dock-divider {
+    width: 1px;
+    height: 22px;
+    margin: 0 4px;
+    background: rgba(26, 20, 16, 0.10);
+  }
+  .mobile-bottom-nav .mobile-dock-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-coral);
+    box-shadow: 0 0 0 1.5px rgba(255, 252, 244, 0.92), 0 0 6px var(--accent-coral);
+  }
+
+  /* ---- Dashboard header: tighter on mobile ---- */
+  [data-screen-label*="dashboard"] .scroll > div:first-child h1.t-display {
+    font-size: clamp(26px, 7.5vw, 34px) !important;
+    line-height: 1.05;
+  }
+
+  /* ---- Card padding scales down on small screens ---- */
+  [data-screen-label*="dashboard"] [style*="grid-column"] .glass > div[style*="padding: 22"],
+  [data-screen-label*="dashboard"] [style*="grid-column"] .glass > div[style*="padding: 24"] {
+    padding: clamp(14px, 4.4vw, 22px) !important;
+  }
+}
+
+/* Very small phones — go a bit smaller still */
+@media (max-width: 374px) {
+  /* Very small phones — slim the dock so it never overflows */
+  .mobile-bottom-nav { padding: 6px 8px !important; gap: 2px !important; }
+  .mobile-bottom-nav .mobile-dock-btn { width: 38px !important; height: 38px !important; }
+  [data-screen-label*="dashboard"] .glass .t-display {
+    font-size: clamp(16px, 5vw, 20px) !important;
+  }
+  [data-screen-label*="dashboard"] .glass .t-num {
+    font-size: clamp(36px, 13vw, 52px) !important;
   }
 }

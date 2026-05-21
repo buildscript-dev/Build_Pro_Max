@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useApp } from '../../store/AppContext';
+import { useAppActions } from '../../store/AppContext';
 import { Icon, AiOrb } from '../ui/Icons';
 
 function simulatedAnswer(label, q) {
@@ -56,7 +56,7 @@ function simulatedAnswer(label, q) {
 }
 
 export const CmdK = ({ open, onClose, onNavigate }) => {
-  const { state, actions } = useApp();
+  const { actions } = useAppActions();
   const [q, setQ]       = useState("");
   const [sel, setSel]   = useState(0);
   const [busy, setBusy] = useState(false);

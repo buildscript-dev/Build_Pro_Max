@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb, Avatar } from '../components/ui/Icons';
-import { useApp } from '../store/AppContext';
+import { useAppState, useAppActions, useAppStore } from '../store/AppContext';
 import { generateAiResponse, fetchAndSummarizeUrl } from '../services/ai';
 import { ScreenShell } from '../components/ui/ScreenShell';
 import { ScreenGuide } from '../components/ui/ScreenGuide';
 
 export const AiChat = () => {
-  const { state, actions } = useApp();
+  const { actions } = useAppActions();
+  const store = useAppStore();
+  const messages = useAppState((s) => s.chatMessages) || [];
+  const openTasks = useAppState((s) => s.tasks?.filter(t => t.status !== 'done').length || 0);
+  const todayTasks = useAppState((s) => s.tasks?.filter(t => /today/i.test(t.due) && t.status !== 'done').length || 0);
+  const notesCount = useAppState((s) => s.notes?.length || 0);
   const messagesEndRef = useRef(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
-
-  const messages = state.chatMessages || [];
   const [webUrl, setWebUrl] = useState('');
   const [webSummary, setWebSummary] = useState('');
   const [webError, setWebError] = useState('');
@@ -141,7 +144,7 @@ export const AiChat = () => {
     try {
       actions.addChatMessage({ role: "user", text: userMsg });
 
-      const response = await generateAiResponse(userMsg, state, messages);
+      const response = await generateAiResponse(userMsg, store.getSnapshot(), messages);
       const qLower = userMsg.toLowerCase();
       const suggestedActions = [];
       if (/meeting|schedule|event/i.test(qLower)) suggestedActions.push('Show calendar');
@@ -260,9 +263,9 @@ export const AiChat = () => {
           <GlassCard>
             <div className="t-cap" style={{ color: "var(--accent-orange)" }}>What I know about your week</div>
             <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8, fontSize: 12.5, color: "var(--ink-2)", lineHeight: 1.5 }}>
-              <div>• {state.tasks?.filter(t => t.status !== 'done').length || 0} open tasks</div>
-              <div>• {state.tasks?.filter(t => /today/i.test(t.due) && t.status !== 'done').length || 0} due today</div>
-              <div>• {state.notes?.length || 0} notes captured</div>
+              <div>• {openTasks} open tasks</div>
+              <div>• {todayTasks} due today</div>
+              <div>• {notesCount} notes captured</div>
               <div>• {messages.length} messages this session</div>
             </div>
             <div className="hair" style={{ margin: "12px 0" }}/>

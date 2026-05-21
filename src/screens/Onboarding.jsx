@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb, Avatar } from '../components/ui/Icons';
 import { accentColor } from '../data';
-import { useApp } from '../store/AppContext';
+import { useAppActions } from '../store/AppContext';
 
 export const Onboarding = ({ onComplete }) => {
-  const { actions } = useApp();
+  const { actions } = useAppActions();
   const [step, setStep] = useState(0);
   const [selectedTrack, setSelectedTrack] = useState('Close the seed round');
   const [selectedTone, setSelectedTone] = useState('Direct');

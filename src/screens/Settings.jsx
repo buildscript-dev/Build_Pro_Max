@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GlassCard, PaperButton, Avatar, Icon } from '../components/ui/Icons';
 import { accentColor } from '../data';
-import { useApp } from '../store/AppContext';
+import { useAppState, useAppActions } from '../store/AppContext';
 import { logout, deleteAccount } from '../store/auth';
 import { connectGmail, disconnectGmail, isGmailConnected, getGmailEmail } from '../services/gmail';
 import { connectNotion, disconnectNotion, isNotionConnected, getNotionEmail, getNotionWorkspace } from '../services/notion';
@@ -11,8 +11,13 @@ import { ScreenShell } from '../components/ui/ScreenShell';
 const NAV_BASE = ['Profile', 'Appearance', 'AI behavior', 'Connected accounts', 'Devices', 'Notifications', 'Privacy', 'Keyboard', 'About'];
 
 export const Settings = ({ onShowAuth, onLogout: _onLogout }) => {
-  const { state, actions, authUser, onLogout: ctxLogout } = useApp();
-  const { user, tweaks } = state;
+  const { actions, authUser, onLogout: ctxLogout } = useAppActions();
+  const user = useAppState((s) => s.user);
+  const tweaks = useAppState((s) => s.tweaks);
+  const devices = useAppState((s) => s.devices) || [];
+  const taskCount = useAppState((s) => s.tasks?.length || 0);
+  const noteCount = useAppState((s) => s.notes?.length || 0);
+  const contactCount = useAppState((s) => s.contacts?.length || 0);
   const [activeSection, setActiveSection] = useState(authUser ? 'Appearance' : 'Account');
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileData, setProfileData] = useState({ ...user });
@@ -476,7 +481,7 @@ export const Settings = ({ onShowAuth, onLogout: _onLogout }) => {
                 )}
                 {activeSection === 'Devices' && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {(state.devices || []).map(d => (
+                    {devices.map(d => (
                       <div key={d.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 10, background: "rgba(255,252,244,.5)", border: "0.5px solid rgba(26,20,16,.06)" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <Icon name={d.kind} size={16} color={d.online ? "var(--ink-1)" : "var(--ink-4)"} />
@@ -527,7 +532,7 @@ export const Settings = ({ onShowAuth, onLogout: _onLogout }) => {
                     <p><strong>Build_PRO_MAX_1</strong> — B.0.0.1</p>
                     <p>Paper × Liquid Glass design system. An execution OS for founders shipping product, fundraising, and hiring.</p>
                     <p className="t-mono" style={{ fontSize: 11, color: "var(--ink-3)", marginTop: 16 }}>
-                      {Object.keys(state).length} data entities · {state.tasks?.length || 0} tasks · {state.notes?.length || 0} notes · {state.contacts?.length || 0} contacts
+                      {taskCount} tasks · {noteCount} notes · {contactCount} contacts
                     </p>
                   </div>
                 )}

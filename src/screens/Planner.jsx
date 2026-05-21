@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb } from '../components/ui/Icons';
 import { accentColor } from '../data';
-import { useApp } from '../store/AppContext';
+import { useAppActions, useAppStore } from '../store/AppContext';
 import { generateAiResponse } from '../services/ai';
 import { formatDate, getCurrentTime } from '../services/clock';
 import { ScreenGuide } from '../components/ui/ScreenGuide';
@@ -28,7 +28,8 @@ const defaultTracks = () => {
 };
 
 export const Planner = () => {
-  const { state, actions } = useApp();
+  const { actions } = useAppActions();
+  const store = useAppStore();
   const [scope, setScope] = useState("week");
   const [data, setData] = useState(defaultTracks);
 
@@ -43,8 +44,9 @@ export const Planner = () => {
 
   const regenerate = useCallback(async () => {
     actions.addNotification({ text: 'AI regenerating tracks…', kind: 'info' });
-    const prompt = `I have ${state.tasks?.length || 0} tasks and ${state.notes?.length || 0} notes. My current week tracks are: ${tracks.map(t => t.name).join(', ')}. Suggest an optimized weekly plan prioritizing my ${state.tasks?.filter(t => t.priority === 'P0' && t.status !== 'done').length || 0} P0 tasks. Return a brief suggestion.`;
-    const response = await generateAiResponse(prompt, state);
+    const snapshot = store.getSnapshot();
+    const prompt = `I have ${snapshot.tasks?.length || 0} tasks and ${snapshot.notes?.length || 0} notes. My current week tracks are: ${tracks.map(t => t.name).join(', ')}. Suggest an optimized weekly plan prioritizing my ${snapshot.tasks?.filter(t => t.priority === 'P0' && t.status !== 'done').length || 0} P0 tasks. Return a brief suggestion.`;
+    const response = await generateAiResponse(prompt, snapshot);
     const daysArr = (() => {
       const now = new Date();
       const dayOfWeek = (now.getDay() + 6) % 7;
@@ -65,7 +67,7 @@ export const Planner = () => {
     }));
     setData({ tracks: regenerated, days: daysArr });
     if (response) actions.addNotification({ text: `AI: ${response.slice(0, 120)}…`, kind: 'info' });
-  }, [state, tracks, actions]);
+  }, [store, tracks, actions]);
 
   const showMe = () => {
     actions.addNotification({ text: 'Showing competing blocks: Product polish vs All-hands prep on Friday', kind: 'info' });

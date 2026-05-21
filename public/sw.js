@@ -1,13 +1,28 @@
 /* Build_PRO_MAX_1 Service Worker
-   Cache-first strategy for offline support */
+   Cache-first for built static assets only. NEVER caches Vite dev modules. */
 
-const CACHE_NAME = 'build-pro-max-v1';
+const CACHE_NAME = 'build-pro-max-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/liquid_glass.png',
 ];
+
+// Returns true for any request that should bypass the SW entirely
+// (Vite dev modules, source files, HMR pings, etc.)
+function shouldBypass(url) {
+  return (
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/@vite/') ||
+    url.pathname.startsWith('/@id/') ||
+    url.pathname.startsWith('/@fs/') ||
+    url.pathname.startsWith('/node_modules/') ||
+    url.pathname === '/__open-in-editor' ||
+    url.search.includes('import') ||
+    url.search.includes('t=')
+  );
+}
 
 // Install: cache static assets
 self.addEventListener('install', (event) => {
@@ -43,6 +58,9 @@ self.addEventListener('fetch', (event) => {
 
   // Skip non-GET requests
   if (request.method !== 'GET') return;
+
+  // Never intercept Vite dev modules or HMR — let the network always win in dev
+  if (shouldBypass(url)) return;
 
   // Skip external API calls (OpenRouter, Google, fonts, etc.)
   if (

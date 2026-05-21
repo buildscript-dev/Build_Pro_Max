@@ -7,11 +7,22 @@ import App from './App.jsx'
 import './index.css'
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // Service worker registration failed — app still works without it
+  if (import.meta.env.PROD) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {
+        // Service worker registration failed — app still works without it
+      });
     });
-  });
+  } else {
+    // In dev, ensure any previously installed SW is unregistered so Vite HMR
+    // is never served stale modules from the SW cache.
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      regs.forEach((r) => r.unregister());
+    });
+    if (window.caches) {
+      caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+    }
+  }
 }
 
 const STORAGE_KEY = 'build_pro_max_1_state';

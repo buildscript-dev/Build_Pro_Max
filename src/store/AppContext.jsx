@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { AppData as initialData } from '../data';
 import { sendNotification, checkDueReminders } from '../services/clock';
 import { fetchAllFromSupabase, syncToSupabase, deleteFromSupabase, subscribeToAll } from '../services/supabaseDb';
@@ -459,11 +459,48 @@ function reducer(state, action) {
   }
 }
 
-const AppContext = createContext(null);
+// ─── Subscribable store ───
+// Stateful per-Provider; state is held outside React so subscribers can
+// pick individual slices via useSyncExternalStore.
+function createStore(initial) {
+  let state = initial;
+  const listeners = new Set();
+  return {
+    getSnapshot: () => state,
+    setState: (updater) => {
+      const next = typeof updater === 'function' ? updater(state) : updater;
+      if (next === state) return;
+      state = next;
+      listeners.forEach((l) => l());
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+const NOOP = () => {};
+
+// Two contexts so screens only subscribe to what they need:
+//  - AppStoreContext: stable for the lifetime of the provider (never changes
+//    after mount). Used by useAppState/useAppStore for granular subscriptions.
+//  - AppActionsContext: changes only when authUser/bootDone/onLogout change.
+const AppStoreContext = createContext(null);
+const AppActionsContext = createContext(null);
 
 export function AppProvider({ children, authUser: initialAuthUser = null, setAuthUser: externalSetAuth = null, onLogout: externalLogout = null }) {
-  const saved = loadState();
-  const [state, dispatch] = useReducer(reducer, saved || freshState());
+  // Store is created exactly once per provider mount.
+  const storeRef = useRef(null);
+  if (storeRef.current === null) {
+    storeRef.current = createStore(loadState() || freshState());
+  }
+  const store = storeRef.current;
+
+  const dispatch = useCallback((action) => {
+    store.setState((s) => reducer(s, action));
+  }, [store]);
+
   const [bootDone, setBootDone] = useState(false);
   const [authUser, setAuthUser] = useState(initialAuthUser);
 
@@ -476,72 +513,61 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
     return () => clearTimeout(id);
   }, []);
 
+  // ─── Supabase hydration + realtime ───
   useEffect(() => {
-    if (authUser && authUser.id) {
-      // 1. Hydrate full state initially
-      fetchAllFromSupabase(authUser.id).then(results => {
-        dispatch({ type: 'HYDRATE_SUPABASE', payload: results });
-      }).catch(err => console.error("Supabase load failed", err));
+    if (!authUser?.id) return;
+    fetchAllFromSupabase(authUser.id)
+      .then((results) => dispatch({ type: 'HYDRATE_SUPABASE', payload: results }))
+      .catch((err) => console.error('Supabase load failed', err));
+    const unsubscribe = subscribeToAll(authUser.id, (table, eventType, newRecord, oldRecord) => {
+      dispatch({ type: 'REALTIME_CHANGE', payload: { table, eventType, newRecord, oldRecord } });
+    });
+    return () => unsubscribe();
+  }, [authUser, dispatch]);
 
-      // 2. Listen to real-time changes
-      const unsubscribe = subscribeToAll(authUser.id, (table, eventType, newRecord, oldRecord) => {
-        dispatch({ type: 'REALTIME_CHANGE', payload: { table, eventType, newRecord, oldRecord } });
-      });
-
-      return () => {
-        unsubscribe();
-      };
-    }
-  }, [authUser]);
-
-  // Track whether current state change came from cross-tab sync (to avoid re-broadcasting)
+  // ─── Debounced localStorage persistence + cross-tab broadcast ───
   const isSyncingRef = useRef(false);
-
-  // Debounced localStorage persistence — avoid serializing on every tiny dispatch
-  const persistTimer = useRef(null);
   useEffect(() => {
-    if (persistTimer.current) clearTimeout(persistTimer.current);
-    persistTimer.current = setTimeout(() => {
+    let timer = null;
+    const flush = () => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        // Only broadcast if this state change originated locally (not from another tab)
+        const s = store.getSnapshot();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
         if (!isSyncingRef.current && window.__buildProMaxSync?.broadcast) {
-          window.__buildProMaxSync.broadcast(state);
+          window.__buildProMaxSync.broadcast(s);
         }
-      } catch (e) { /* quota exceeded — ignore */ }
-    }, 400);
-    return () => clearTimeout(persistTimer.current);
-  }, [state]);
+      } catch { /* quota exceeded — ignore */ }
+    };
+    const unsub = store.subscribe(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(flush, 400);
+    });
+    return () => { if (timer) clearTimeout(timer); unsub(); };
+  }, [store]);
 
-  // Listen for cross-tab state sync events — stable listener, merges via ref
+  // ─── Cross-tab sync receive ───
   useEffect(() => {
     const handleSync = (e) => {
       const syncedState = e.detail;
-      if (syncedState) {
-        isSyncingRef.current = true;
-        const current = stateRef.current;
-        const merged = { ...current, ...syncedState, tweaks: { ...current.tweaks, ...syncedState.tweaks } };
-        dispatch({ type: 'REPLACE_STATE', payload: merged });
-        // Reset flag after the state update and persistence cycle completes
-        setTimeout(() => { isSyncingRef.current = false; }, 600);
-      }
+      if (!syncedState) return;
+      isSyncingRef.current = true;
+      const current = store.getSnapshot();
+      const merged = { ...current, ...syncedState, tweaks: { ...current.tweaks, ...syncedState.tweaks } };
+      store.setState(() => merged);
+      setTimeout(() => { isSyncingRef.current = false; }, 600);
     };
     window.addEventListener('build_pro_max_state_sync', handleSync);
     return () => window.removeEventListener('build_pro_max_state_sync', handleSync);
-  }, []); // stable — reads fresh state via stateRef
+  }, [store]);
 
-  // Use a ref to always have fresh state inside the AI interval (avoids stale closure)
-  const stateRef = useRef(state);
-  useEffect(() => { stateRef.current = state; }, [state]);
-
-  // Stable AI suggestion interval — runs every 30s, reads from ref to avoid stale data
+  // ─── AI suggestion interval (30s) ───
   useEffect(() => {
     const iv = setInterval(() => {
-      const s = stateRef.current;
+      const s = store.getSnapshot();
       const now = new Date();
       const h = now.getHours();
-      const recent = s.tasks.filter(t => t.status === 'todo' && /today/i.test(t.due));
-      const overdue = s.tasks.filter(t => t.status === 'todo' && /past/i.test(t.due));
+      const recent = s.tasks.filter((t) => t.status === 'todo' && /today/i.test(t.due));
+      const overdue = s.tasks.filter((t) => t.status === 'todo' && /past/i.test(t.due));
       const suggestions = [];
       if (recent.length > 2) suggestions.push({ kind: 'focus', text: `You have ${recent.length} tasks due today. Start with the highest priority first.` });
       if (overdue.length > 0) suggestions.push({ kind: 'reschedule', text: `${overdue.length} task(s) are overdue. Want to reschedule them?` });
@@ -551,137 +577,167 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
       }
     }, 30000);
     return () => clearInterval(iv);
-  }, []); // stable — only runs once, reads live state via stateRef
+  }, [store, dispatch]);
 
-  // Reminder checker — fires browser notifications for reminders every 60s
+  // ─── Reminder checker (60s) ───
   const firedRef = useRef(new Set());
   useEffect(() => {
     const iv = setInterval(() => {
-      const s = stateRef.current;
+      const s = store.getSnapshot();
       const due = checkDueReminders(s.reminders);
-      if (due.length > 0) {
-        due.forEach(r => {
-          if (firedRef.current.has(r.id)) return;
-          firedRef.current.add(r.id);
-          sendNotification(r.title || 'Reminder', { body: r.text || r.title || '' });
-          dispatch({ type: 'ADD_NOTIFICATION', payload: { text: `Reminder: ${r.title || 'Reminder'}`, kind: 'info' } });
-        });
-      }
+      due.forEach((r) => {
+        if (firedRef.current.has(r.id)) return;
+        firedRef.current.add(r.id);
+        sendNotification(r.title || 'Reminder', { body: r.text || r.title || '' });
+        dispatch({ type: 'ADD_NOTIFICATION', payload: { text: `Reminder: ${r.title || 'Reminder'}`, kind: 'info' } });
+      });
     }, 60000);
     return () => clearInterval(iv);
-  }, []);
+  }, [store, dispatch]);
 
-  // Contact warmth decay — decay every 6 hours
+  // ─── Warmth decay (every 6h) ───
   useEffect(() => {
-    const iv = setInterval(() => {
-      dispatch({ type: 'DECAY_WARMTH' });
-    }, 6 * 3600000); // 6 hours
+    const iv = setInterval(() => dispatch({ type: 'DECAY_WARMTH' }), 6 * 3600000);
     return () => clearInterval(iv);
-  }, []);
+  }, [dispatch]);
 
-  // Memoize actions so child components don't re-render just because the provider re-rendered
+  // ─── Actions ───
+  // Re-memoized only when authUser changes (which gates Supabase writes).
   const actions = useMemo(() => ({
-    // Tasks
     addTask: (data) => { dispatch({ type: 'ADD_TASK', payload: data }); if (authUser) syncToSupabase('tasks', data); },
     updateTask: (data) => { dispatch({ type: 'UPDATE_TASK', payload: data }); if (authUser) syncToSupabase('tasks', data); },
     deleteTask: (id) => { dispatch({ type: 'DELETE_TASK', payload: id }); if (authUser) deleteFromSupabase('tasks', id); },
     toggleTask: (id) => {
       dispatch({ type: 'TOGGLE_TASK', payload: id });
       if (authUser) {
-        const task = stateRef.current.tasks.find(t => t.id === id);
+        const task = store.getSnapshot().tasks.find((t) => t.id === id);
         if (task) syncToSupabase('tasks', { ...task, status: task.status === 'done' ? 'todo' : 'done' });
       }
     },
     reorderTasks: (tasks) => { dispatch({ type: 'REORDER_TASKS', payload: tasks }); if (authUser) syncToSupabase('tasks', tasks); },
 
-    // Notes
     addNote: (data) => { dispatch({ type: 'ADD_NOTE', payload: data }); if (authUser) syncToSupabase('notes', data); },
     updateNote: (data) => { dispatch({ type: 'UPDATE_NOTE', payload: data }); if (authUser) syncToSupabase('notes', data); },
     deleteNote: (id) => { dispatch({ type: 'DELETE_NOTE', payload: id }); if (authUser) deleteFromSupabase('notes', id); },
     togglePinNote: (id) => { dispatch({ type: 'TOGGLE_PIN_NOTE', payload: id }); },
 
-    // Events
     addEvent: (data) => { dispatch({ type: 'ADD_EVENT', payload: data }); if (authUser) syncToSupabase('events', data); },
     updateEvent: (data) => { dispatch({ type: 'UPDATE_EVENT', payload: data }); if (authUser) syncToSupabase('events', data); },
     deleteEvent: (id) => { dispatch({ type: 'DELETE_EVENT', payload: id }); if (authUser) deleteFromSupabase('events', id); },
 
-    // Contacts
     addContact: (data) => { dispatch({ type: 'ADD_CONTACT', payload: data }); if (authUser) syncToSupabase('contacts', data); },
     updateContact: (data) => { dispatch({ type: 'UPDATE_CONTACT', payload: data }); if (authUser) syncToSupabase('contacts', data); },
     deleteContact: (id) => { dispatch({ type: 'DELETE_CONTACT', payload: id }); if (authUser) deleteFromSupabase('contacts', id); },
 
-    // Files — accept id or name for progress/remove
     addFile: (data) => { dispatch({ type: 'ADD_FILE', payload: data }); if (authUser) syncToSupabase('files', data); },
     updateFileProgress: (idOrName, progress) => dispatch({ type: 'UPDATE_FILE_PROGRESS', payload: { id: idOrName, name: idOrName, progress } }),
     removeFile: (idOrName) => {
       dispatch({ type: 'REMOVE_FILE', payload: idOrName });
       if (authUser) {
-        const file = stateRef.current.files.find(f => f.id === idOrName || f.name === idOrName);
+        const file = store.getSnapshot().files.find((f) => f.id === idOrName || f.name === idOrName);
         if (file?.id) deleteFromSupabase('files', file.id);
       }
     },
 
-    // Schedule
     addScheduleBlock: (data) => { dispatch({ type: 'ADD_SCHEDULE_BLOCK', payload: data }); if (authUser) syncToSupabase('schedule', data); },
     updateScheduleBlock: (index, data) => { dispatch({ type: 'UPDATE_SCHEDULE_BLOCK', payload: { index, data } }); },
 
-    // Goals
     updateGoal: (data) => { dispatch({ type: 'UPDATE_GOAL', payload: data }); if (authUser) syncToSupabase('goals', data); },
 
-    // Reminders
     addReminder: (data) => { dispatch({ type: 'ADD_REMINDER', payload: data }); if (authUser) syncToSupabase('reminders', data); },
     deleteReminder: (id) => { dispatch({ type: 'DELETE_REMINDER', payload: id }); if (authUser) deleteFromSupabase('reminders', id); },
 
-    // Chat
     addChatMessage: (data) => { dispatch({ type: 'ADD_CHAT_MESSAGE', payload: data }); if (authUser) syncToSupabase('chat_messages', data); },
     clearChat: () => dispatch({ type: 'CLEAR_CHAT' }),
 
-    // Notifications
     addNotification: (data) => { dispatch({ type: 'ADD_NOTIFICATION', payload: data }); if (authUser) syncToSupabase('notifications', data); },
     markNotificationRead: (id) => dispatch({ type: 'MARK_NOTIFICATION_READ', payload: id }),
     markAllNotificationsRead: () => dispatch({ type: 'MARK_ALL_NOTIFICATIONS_READ' }),
     clearNotifications: () => dispatch({ type: 'CLEAR_NOTIFICATIONS' }),
 
-    // Tweaks
     setTweak: (key, val) => { dispatch({ type: 'SET_TWEAK', payload: { [key]: val } }); if (authUser) syncToSupabase('settings', { id: authUser.id, tweaks: { [key]: val } }); },
 
-    // User
     updateUser: (data) => { dispatch({ type: 'UPDATE_USER', payload: data }); },
 
-    // AI
     setAiSuggestions: (data) => dispatch({ type: 'SET_AI_SUGGESTIONS', payload: data }),
-
-    // Environment / AI Automation
     setAutomationEnabled: (bool) => dispatch({ type: 'SET_AUTOMATION_ENABLED', payload: bool }),
     addAuditLog: (entry) => dispatch({ type: 'ADD_AUDIT_LOG', payload: entry }),
     addAutomationFeedback: (feedback) => dispatch({ type: 'ADD_AUTOMATION_FEEDBACK', payload: feedback }),
     setAutoReply: (message) => dispatch({ type: 'SET_AUTO_REPLY', payload: message }),
-
     decayWarmth: () => dispatch({ type: 'DECAY_WARMTH' }),
-  }), [dispatch, authUser]);
+  }), [dispatch, authUser, store]);
 
-  // Stable no-op logout to avoid creating new function reference when externalLogout is absent
-  const noopLogout = useCallback(() => {}, []);
-  const resolvedLogout = externalLogout || noopLogout;
-
-  const contextValue = useMemo(() => ({
-    state,
+  // Stable across renders unless one of its members actually changes.
+  const actionsContextValue = useMemo(() => ({
     actions,
-    bootDone,
     authUser,
     setAuthUser,
-    onLogout: resolvedLogout,
-  }), [state, actions, bootDone, authUser, setAuthUser, resolvedLogout]);
+    onLogout: externalLogout || NOOP,
+    bootDone,
+  }), [actions, authUser, externalLogout, bootDone]);
 
   return (
-    <AppContext.Provider value={contextValue}>
-      {children}
-    </AppContext.Provider>
+    <AppStoreContext.Provider value={store}>
+      <AppActionsContext.Provider value={actionsContextValue}>
+        {children}
+      </AppActionsContext.Provider>
+    </AppStoreContext.Provider>
   );
 }
 
-export function useApp() {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be inside AppProvider');
+// ─── Hooks ───
+
+const identity = (s) => s;
+
+/**
+ * Subscribe to a slice of state. Component re-renders only when the
+ * selected value (compared with Object.is) changes.
+ *
+ *   const tasks = useAppState((s) => s.tasks);
+ *
+ * Pass no argument to subscribe to the entire state object.
+ */
+export function useAppState(selector = identity) {
+  const store = useContext(AppStoreContext);
+  if (!store) throw new Error('useAppState must be inside AppProvider');
+  // Selector is read fresh on every snapshot; the function passed to
+  // useSyncExternalStore is recreated each render but useSyncExternalStore
+  // calls it on demand, so this is safe.
+  const selectorRef = useRef(selector);
+  selectorRef.current = selector;
+  const getSnapshot = useCallback(() => selectorRef.current(store.getSnapshot()), [store]);
+  return useSyncExternalStore(store.subscribe, getSnapshot);
+}
+
+/**
+ * Read actions and auth without subscribing to state changes. The returned
+ * object changes only when authUser/bootDone/onLogout change, so a component
+ * that only calls useAppActions() will re-render at most on auth changes.
+ */
+export function useAppActions() {
+  const ctx = useContext(AppActionsContext);
+  if (!ctx) throw new Error('useAppActions must be inside AppProvider');
   return ctx;
+}
+
+/**
+ * Escape hatch for reading state imperatively (e.g. inside an async handler
+ * that needs a one-shot snapshot without subscribing). Does NOT cause
+ * re-renders.
+ */
+export function useAppStore() {
+  const store = useContext(AppStoreContext);
+  if (!store) throw new Error('useAppStore must be inside AppProvider');
+  return store;
+}
+
+/**
+ * Backward-compatible hook. Subscribes to the full state, so components
+ * using it still re-render on every change. Prefer useAppState(selector)
+ * for performance.
+ */
+export function useApp() {
+  const state = useAppState();
+  const actionsCtx = useAppActions();
+  return { state, ...actionsCtx };
 }

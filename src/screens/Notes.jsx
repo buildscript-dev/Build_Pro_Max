@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb } from '../components/ui/Icons';
-import { useApp } from '../store/AppContext';
+import { useAppState, useAppActions, useAppStore } from '../store/AppContext';
 import { ScreenShell } from '../components/ui/ScreenShell';
 import { ScreenGuide } from '../components/ui/ScreenGuide';
 import {
@@ -87,8 +87,10 @@ function LaserLayer({ active, pointsRef }) {
 
 // ─── Notes screen ─────────────────────────────────────────────────────────────
 export const Notes = () => {
-  const { state, actions } = useApp();
-  const notes = state.notes || [];
+  const { actions } = useAppActions();
+  const store = useAppStore();
+  const notes = useAppState((s) => s.notes) || [];
+  const environmentMode = useAppState((s) => s.tweaks?.environmentMode);
   const [selectedId, setSelectedId] = useState(notes[0]?.id || null);
   const [search, setSearch] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -195,8 +197,9 @@ export const Notes = () => {
 
     actions.updateNote({ id: noteId, title, tag, icon, ai: aiSummary, content });
 
+    const snapshot = store.getSnapshot();
     extractedItems.reminders.forEach(act => {
-      const alreadyScheduled = state.reminders?.some(r => r.title === act.title && r.time === act.time && r.day === act.day);
+      const alreadyScheduled = snapshot.reminders?.some(r => r.title === act.title && r.time === act.time && r.day === act.day);
       if (!alreadyScheduled) {
         actions.addReminder(act);
         actions.addNotification({ text: `⏰ AI automated: Scheduled "${act.title}" for ${act.time}`, kind: 'info' });
@@ -204,7 +207,7 @@ export const Notes = () => {
     });
 
     extractedItems.tasks.forEach(task => {
-      const alreadyExists = state.tasks?.some(t => t.title === task.title && t.status !== 'done');
+      const alreadyExists = snapshot.tasks?.some(t => t.title === task.title && t.status !== 'done');
       if (!alreadyExists) {
         actions.addTask(task);
         actions.addNotification({ text: `📋 AI extracted task: "${task.title}"`, kind: 'info' });
@@ -212,15 +215,15 @@ export const Notes = () => {
     });
 
     extractedItems.events.forEach(event => {
-      const alreadyExists = state.events?.some(e => e.title === event.title && e.day === event.day);
+      const alreadyExists = snapshot.events?.some(e => e.title === event.title && e.day === event.day);
       if (!alreadyExists) actions.addEvent(event);
     });
 
-    if (envState.isLearningSession && learningItems && state.automationEnabled === true) {
+    if (envState.isLearningSession && learningItems && snapshot.automationEnabled === true) {
       const hasMeaningfulContent = learningItems.concepts.length > 0 || learningItems.codeBlocks.length > 0 || learningItems.errors.length > 0 || learningItems.questions.length > 0;
       if (hasMeaningfulContent) {
         const learningNote = generateLearningNote(learningItems, title);
-        const alreadyGenerated = state.notes?.some(n => n.title === learningNote.title && n.tag === 'Learning');
+        const alreadyGenerated = snapshot.notes?.some(n => n.title === learningNote.title && n.tag === 'Learning');
         if (!alreadyGenerated) {
           actions.addNote(learningNote);
           actions.addNotification({ text: `🧠 AI auto-captured learning session: ${learningItems.concepts.length} concepts, ${learningItems.codeBlocks.length} code blocks`, kind: 'info' });
@@ -228,7 +231,7 @@ export const Notes = () => {
       }
     }
 
-    if (envState.shouldAct && envState.mode !== 'normal' && state.automationEnabled === true) {
+    if (envState.shouldAct && envState.mode !== 'normal' && snapshot.automationEnabled === true) {
       actions.addAuditLog({
         action: 'environment_mode_change', mode: envState.mode, source: 'note', noteId,
         confidence: envState.confidence,
@@ -795,7 +798,7 @@ export const Notes = () => {
               <AiOrb size={20} intensity={1.2} />
               <div className="t-cap" style={{ color: 'var(--accent-orange)' }}>AI Assistant</div>
               <div style={{ marginLeft: 'auto' }}>
-                <EnvironmentBadge mode={state.tweaks?.environmentMode} />
+                <EnvironmentBadge mode={environmentMode} />
               </div>
             </div>
             <div className="scroll" style={{ flex: 1, overflowY: 'auto', fontSize: 13, lineHeight: 1.65, color: 'var(--ink-1)' }}>

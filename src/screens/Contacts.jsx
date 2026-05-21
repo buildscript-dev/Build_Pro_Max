@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb, Avatar } from '../components/ui/Icons';
 import { accentColor } from '../data';
-import { useApp } from '../store/AppContext';
+import { useAppState, useAppActions, useAppStore } from '../store/AppContext';
 import { isGmailConnected, getRecentEmails } from '../services/gmail';
 import { generateEmailDraft } from '../services/ai';
 import { ScreenShell } from '../components/ui/ScreenShell';
@@ -10,8 +10,9 @@ const TAGS = ['Team', 'Investor', 'Hiring', 'Personal', 'Network', 'Partner', 'M
 const COLORS = ['amber', 'orange', 'coral', 'rose'];
 
 export const Contacts = () => {
-  const { state, actions } = useApp();
-  const contacts = state.contacts || [];
+  const { actions } = useAppActions();
+  const store = useAppStore();
+  const contacts = useAppState((s) => s.contacts) || [];
   const [selId, setSelId] = useState(contacts[0]?.id || null);
   const [syncing, setSyncing] = useState(false);
   const [gmailEmails, setGmailEmails] = useState([]);
@@ -105,7 +106,7 @@ export const Contacts = () => {
   const draftMessage = async () => {
     if (!c) return;
     setAiDraftLoading(true);
-    const draft = await generateEmailDraft(c, state);
+    const draft = await generateEmailDraft(c, store.getSnapshot());
     setAiDraft(draft);
     setAiDraftLoading(false);
     actions.addNotification({ text: `AI drafted email for ${c.name}`, kind: 'info' });
