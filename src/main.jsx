@@ -36,6 +36,18 @@ window.addEventListener('appinstalled', () => {
 const STORAGE_KEY = 'build_pro_max_1_state';
 const CHANNEL_NAME = 'build_pro_max_1_sync';
 
+// Migrate canvas:'mono' → canvas:'dark' so dark-shader theme is always correct
+try {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) {
+    const parsed = JSON.parse(raw);
+    if (parsed?.tweaks?.canvas === 'mono') {
+      parsed.tweaks.canvas = 'dark';
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    }
+  }
+} catch { /* ignore corrupt localStorage */ }
+
 function setupCrossTabSync() {
   if (!('BroadcastChannel' in window)) return;
 

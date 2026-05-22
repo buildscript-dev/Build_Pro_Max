@@ -426,7 +426,7 @@ const ExpandedCard = ({ card, data, onClose, onNavigate, actions }) => {
         <button onClick={onClose} style={{
           position: "absolute", top: 16, right: 16, zIndex: 2,
           width: 32, height: 32, borderRadius: 999,
-          background: "rgba(26,20,16,.06)", color: "var(--ink-2)",
+          background: "rgba(255,255,255,.07)", color: "var(--ink-2)",
           display: "flex", alignItems: "center", justifyContent: "center"
         }}>
           <Icon name="close" size={16} />
@@ -485,7 +485,7 @@ function FocusCard({ data, expanded, accent }) {
         <span className="t-num" style={{ fontSize: expanded ? 110 : 72, color: "var(--ink-1)", lineHeight: 0.95 }}>{done * 46}</span>
         <span style={{ fontSize: 14, color: "var(--ink-3)", paddingBottom: 8 }}>/ {total * 60} goal</span>
       </div>
-      <div style={{ marginTop: 16, position: "relative", height: 8, borderRadius: 999, background: "rgba(26,20,16,.06)", overflow: "hidden" }}>
+      <div style={{ marginTop: 16, position: "relative", height: 8, borderRadius: 999, background: "rgba(255,255,255,.07)", overflow: "hidden" }}>
         <div style={{
           position: "absolute", inset: 0, width: `${pct}%`,
           background: `linear-gradient(90deg, ${accent}, var(--accent-orange))`,
@@ -653,7 +653,7 @@ function GoalsCard({ data, expanded, accent }) {
                 <span style={{ fontSize: 13, fontWeight: 500 }}>{g.name}</span>
                 <span className="t-num" style={{ fontSize: 22, color: c }}>{g.pct}%</span>
               </div>
-              <div style={{ marginTop: 6, height: 6, borderRadius: 999, background: "rgba(26,20,16,.06)", overflow: "hidden" }}>
+              <div style={{ marginTop: 6, height: 6, borderRadius: 999, background: "rgba(255,255,255,.07)", overflow: "hidden" }}>
                 <div style={{ width: `${g.pct}%`, height: "100%", background: `linear-gradient(90deg, ${c}, ${c}cc)`, borderRadius: 999 }} />
               </div>
               <div style={{ marginTop: 5, fontSize: 10.5, color: "var(--ink-3)" }}>{g.sub}</div>
@@ -809,7 +809,7 @@ function StreakCard({ data, expanded, accent, onNavigate }) {
             <div style={{
             width: "100%", aspectRatio: "1",
             borderRadius: 6,
-            background: d.done ? `linear-gradient(135deg, ${accent}, var(--accent-coral))` : "rgba(26,20,16,.05)",
+            background: d.done ? `linear-gradient(135deg, ${accent}, var(--accent-coral))` : "rgba(255,255,255,.06)",
             boxShadow: d.done ? `0 0 8px ${accent}55` : "none"
           }} />
             <span style={{ fontSize: 9, color: "var(--ink-3)" }}>{d.day}</span>

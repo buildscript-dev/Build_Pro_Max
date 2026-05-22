@@ -96,12 +96,12 @@ export const PaperButton = ({ children, accent = false, primary = false, small =
     ? "linear-gradient(180deg, #f5a524 0%, #f06b1c 100%)"
     : accent
     ? "rgba(245, 165, 36, 0.14)"
-    : "rgba(255, 252, 244, 0.6)";
+    : "rgba(255, 255, 255, 0.08)";
   const color = primary ? "#fff" : "var(--ink-1)";
-  const border = primary ? "0.5px solid rgba(0,0,0,.18)" : "0.5px solid rgba(26,20,16,.10)";
+  const border = primary ? "0.5px solid rgba(0,0,0,.18)" : "0.5px solid rgba(255,255,255,.12)";
   const shadow = primary
     ? "0 1px 0 rgba(255,255,255,.45) inset, 0 -1px 0 rgba(0,0,0,.10) inset, 0 4px 10px -2px rgba(240,107,28,.35)"
-    : "0 1px 0 rgba(255,255,255,.7) inset, 0 1px 2px rgba(46,30,12,.08)";
+    : "0 1px 0 rgba(255,255,255,.08) inset, 0 2px 6px rgba(0,0,0,.25)";
   return (
     <button
       type={type}

@@ -64,7 +64,7 @@ function freshState() {
       glassBlur: 28,
       motion: 'lively',
       nav: 'dock',
-      canvas: 'mono',
+      canvas: 'dark',
       palette: ['#f5a524', '#f06b1c', '#e7402e', '#c2185b'],
       paperWarmth: 1,
       grain: 0.45,
