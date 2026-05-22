@@ -11,9 +11,16 @@ if (ENV_OBSIDIAN_KEY && !localStorage.getItem('obsidian_api_key')) {
   localStorage.setItem('obsidian_vault_path', ENV_VAULT_FOLDER);
 }
 
-const getObsidianUrl  = () => localStorage.getItem('obsidian_url')       || ENV_OBSIDIAN_URL;
-const getObsidianKey  = () => localStorage.getItem('obsidian_api_key')   || ENV_OBSIDIAN_KEY;
-const getVaultFolder  = () => localStorage.getItem('obsidian_vault_path')|| ENV_VAULT_FOLDER;
+const getObsidianKey  = () => localStorage.getItem('obsidian_api_key') || ENV_OBSIDIAN_KEY;
+const getVaultFolder  = () => localStorage.getItem('obsidian_vault_path') || ENV_VAULT_FOLDER;
+
+// Route localhost Obsidian through Vite proxy to avoid browser CORS blocks
+const getObsidianUrl = () => {
+  const stored = localStorage.getItem('obsidian_url');
+  const resolved = stored || ENV_OBSIDIAN_URL;
+  const isLocal = resolved.includes('localhost') || resolved.includes('127.0.0.1');
+  return isLocal ? '/api/obsidian' : resolved;
+};
 
 // ─── Local (localStorage) ─────────────────────────────────────────────────────
 

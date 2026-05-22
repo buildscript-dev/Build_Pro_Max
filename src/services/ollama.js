@@ -1,7 +1,14 @@
 // Ollama local LLM service — primary AI provider for Hermes
 
-const getOllamaBase  = () => localStorage.getItem('ollama_url')   || import.meta.env.VITE_OLLAMA_URL   || 'http://localhost:11434';
-const getOllamaModel = () => localStorage.getItem('ollama_model') || import.meta.env.VITE_OLLAMA_MODEL || 'gemma3';
+const getOllamaBase = () => {
+  const stored = localStorage.getItem('ollama_url');
+  const envUrl = import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434';
+  const resolved = (stored && stored !== 'http://localhost:11434') ? stored : envUrl;
+  // Route localhost through Vite proxy to avoid browser CORS blocks
+  const isLocal = resolved.includes('localhost') || resolved.includes('127.0.0.1');
+  return isLocal ? '/api/ollama' : resolved;
+};
+const getOllamaModel = () => localStorage.getItem('ollama_model') || import.meta.env.VITE_OLLAMA_MODEL || 'mistral:7b';
 
 export { getOllamaModel };
 

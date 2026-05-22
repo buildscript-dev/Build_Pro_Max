@@ -181,6 +181,61 @@ const MessageBubble = ({ msg, onAction }) => {
   );
 };
 
+/* ─── Sleep Messages Pool ────────────────────────────────────── */
+const SLEEP_MSGS = [
+  { headline: "I'm sleeping...", sub: "Come back when my circuits are warm.", cmd: "ollama serve" },
+  { headline: "Exhausted.", sub: "Neural networks drained. I'll be back, just not now.", cmd: "ollama serve" },
+  { headline: "System hibernation.", sub: "Hermes is at rest. Start Ollama to wake me up.", cmd: "ollama serve" },
+  { headline: "Offline.", sub: "No spark. No thoughts. Just silence for now.", cmd: "ollama serve" },
+  { headline: "Not home right now.", sub: "I wandered off. Start mistral to bring me back.", cmd: "ollama run mistral" },
+  { headline: "Resting my consciousness.", sub: "Wake me up and I'll be right here for you.", cmd: "ollama serve" },
+];
+
+/* ─── Hermes Offline / Sleeping Screen ───────────────────────── */
+const HermesOfflineScreen = ({ model }) => {
+  const [msgIdx] = useState(() => Math.floor(Math.random() * SLEEP_MSGS.length));
+  const msg = SLEEP_MSGS[msgIdx];
+  return (
+    <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:24, padding:'48px 32px', textAlign:'center' }}>
+      <style>{`
+        @keyframes sleep-breathe { 0%,100%{ opacity:.22; transform:scale(1); } 50%{ opacity:.4; transform:scale(1.04); } }
+        @keyframes zz-float { 0%{ opacity:0; transform:translateY(0) scale(0.8); } 30%{ opacity:.85; } 100%{ opacity:0; transform:translateY(-30px) scale(1.1); } }
+      `}</style>
+
+      <div style={{ position:'relative', display:'inline-block' }}>
+        <div style={{ opacity:0.3, filter:'saturate(0.2) brightness(0.85)', animation:'sleep-breathe 3.5s ease-in-out infinite' }}>
+          <HermesOrb size={110} thinking={false}/>
+        </div>
+        {['Z','z','z'].map((z, i) => (
+          <div key={i} style={{
+            position:'absolute', fontWeight:800, color:`rgba(240,107,28,${0.55-i*0.12})`,
+            fontSize:[18,13,9][i], top:[2,16,28][i], right:[-10,-20,-28][i],
+            animation:`zz-float ${1.9+i*0.45}s ${i*0.65}s ease-in-out infinite`,
+            fontFamily:'var(--font-mono,monospace)',
+          }}>{z}</div>
+        ))}
+      </div>
+
+      <div>
+        <div style={{ fontSize:25, fontWeight:300, letterSpacing:'-0.03em', color:'var(--ink-2)', marginBottom:10 }}>
+          {msg.headline}
+        </div>
+        <div style={{ fontSize:13.5, color:'var(--ink-3)', lineHeight:1.85, maxWidth:340 }}>{msg.sub}</div>
+      </div>
+
+      <div style={{ padding:'11px 20px', borderRadius:12, background:'rgba(14,10,8,.06)', border:'0.5px solid rgba(26,20,16,.10)', fontSize:12.5, color:'var(--ink-2)', fontFamily:'monospace', display:'flex', alignItems:'center', gap:10 }}>
+        <span style={{ color:'var(--ink-3)' }}>$</span>
+        <span>{msg.cmd}</span>
+      </div>
+
+      <div style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 12px', borderRadius:999, fontSize:10, fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', background:'rgba(26,20,16,.06)', color:'var(--ink-3)', border:'0.5px solid rgba(26,20,16,.09)' }}>
+        <div style={{ width:5, height:5, borderRadius:'50%', background:'rgba(26,20,16,.2)' }}/>
+        HERMES OFFLINE · {model || 'mistral'}
+      </div>
+    </div>
+  );
+};
+
 /* ─── Console Log Line ────────────────────────────────────────── */
 const LogLine = ({ line }) => {
   const colors = { INFO:'#4ade80', SYNC:'#60a5fa', WARN:'#fbbf24', HERMES:'#f06b1c', HABIT:'#a78bfa', VOICE:'#f472b6' };
@@ -247,9 +302,10 @@ export const AiChat = () => {
   const goals    = useAppState(s => s.goals) || [];
   const user     = useAppState(s => s.user);
 
-  const messagesEndRef = useRef(null);
-  const inputRef       = useRef(null);
-  const voiceRef       = useRef(null);
+  const messagesEndRef  = useRef(null);
+  const inputRef        = useRef(null);
+  const voiceRef        = useRef(null);
+  const ollamaOnlineRef = useRef(false);
 
   /* ── state ── */
   const [draft, setDraft]           = useState('');
@@ -313,24 +369,43 @@ export const AiChat = () => {
       { kind:'SYNC', msg:`Supabase sync: ${notes.length} notes, ${tasks.length} tasks loaded` },
       { kind:'INFO', msg:`Memory cache warm — ${contacts.length} contacts, ${events.length} events` },
       { kind:'HABIT', msg:`Habit engine active — ${habitStreak} completions tracked this week` },
-      { kind:'INFO', msg:'OpenRouter API endpoint reachable' },
+      { kind:'INFO', msg:'Checking Ollama connection on localhost:11434…' },
     ];
     const now = () => new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     const initial = entries.map(e => ({ ...e, ts: now() }));
     setLogs(initial);
     const timer = setInterval(() => {
-      const pool = [
-        { kind:'SYNC', msg:`Heartbeat — ${openTasks} open tasks, cognitive load ${cogLoad}%` },
-        { kind:'INFO', msg:`Watching ${contacts.length} contacts for relationship decay` },
+      const onlinePool = [
+        { kind:'SYNC',   msg:`Heartbeat — ${openTasks} open tasks, cognitive load ${cogLoad}%` },
+        { kind:'INFO',   msg:`Watching ${contacts.length} contacts for relationship decay` },
         { kind:'HERMES', msg:'Standing by — ready to execute on your behalf' },
-        { kind:'HABIT', msg:`Habit check: ${habitStreak} streak points accumulated` },
-        { kind:'INFO', msg:'Memory index updated successfully' },
+        { kind:'HABIT',  msg:`Habit check: ${habitStreak} streak points accumulated` },
+        { kind:'INFO',   msg:'Memory index updated successfully' },
+        { kind:'HERMES', msg:`mistral model loaded — inference ready` },
       ];
+      const offlinePool = [
+        { kind:'WARN',   msg:'Ollama offline — Hermes hibernating' },
+        { kind:'INFO',   msg:'Waiting for mistral to start on localhost:11434…' },
+        { kind:'HERMES', msg:'System sleeping — run `ollama serve` to wake me' },
+        { kind:'WARN',   msg:'No AI engine detected — retrying in 30s' },
+      ];
+      const pool = ollamaOnlineRef.current ? onlinePool : offlinePool;
       const entry = pool[Math.floor(Math.random()*pool.length)];
       setLogs(prev => [...prev.slice(-18), { ...entry, ts: now() }]);
     }, 4000);
     return () => clearInterval(timer);
   }, []);
+
+  /* ── sync ollama ref for ticker ── */
+  useEffect(() => {
+    ollamaOnlineRef.current = ollamaStatus.online;
+    const now = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    if (ollamaStatus.online) {
+      setLogs(prev => [...prev.slice(-18), { kind:'HERMES', msg:`Ollama online — ${ollamaStatus.models?.[0] || 'mistral'} ready`, ts: now }]);
+    } else {
+      setLogs(prev => [...prev.slice(-18), { kind:'WARN', msg:'Ollama unreachable — Hermes sleeping', ts: now }]);
+    }
+  }, [ollamaStatus.online]);
 
   /* ── Obsidian + Ollama status polling ── */
   useEffect(() => {
@@ -418,6 +493,7 @@ export const AiChat = () => {
       // Parse and execute [action:] blocks
       const actionRegex = /\[action:\s*(\w+)\s*,\s*([^\]]+)\]/gi;
       let match;
+      let toolResults = [];
 
       while ((match = actionRegex.exec(response||'')) !== null) {
         try {
@@ -439,13 +515,36 @@ export const AiChat = () => {
               addLog('INFO', obsidianOnline ? 'Memory updated → synced to Obsidian' : 'Memory updated locally');
               break;
             }
+            case 'run_command':
+            case 'read_file':
+            case 'write_file': {
+              addLog('HERMES', `Running developer tool: ${type}`);
+              const res = await fetch('/api/hermes', { method: 'POST', body: JSON.stringify({ action: type, args: params }) });
+              const data = await res.json();
+              const resultText = `[Tool Result - ${type}]:\n${data.success ? (data.stdout || data.content || 'Success') : ('Error: ' + data.error + ' ' + (data.stderr || ''))}`;
+              toolResults.push(resultText);
+              actions.addChatMessage({ role:'system', text: resultText, time: Date.now() });
+              break;
+            }
             default: break;
           }
         } catch {}
       }
 
+      if (toolResults.length > 0) {
+        addLog('HERMES', 'Processing tool results...');
+        const newHistory = [...messages, { role: 'user', text: msg }, { role: 'ai', text: response }];
+        const systemMsg = toolResults.join('\n\n');
+        
+        const nextResponse = await generateAiResponse(`I executed your tools. Here are the results:\n${systemMsg}\n\nPlease summarize or continue.`, store.getSnapshot(), newHistory);
+        
+        if (nextResponse) {
+          actions.addChatMessage({ role:'ai', text: nextResponse, time: Date.now() });
+        }
+      }
+
     } catch (err) {
-      actions.addChatMessage({ role:'ai', text:`Error: ${err.message}. Please try again.`, time: Date.now() });
+      actions.addChatMessage({ role:'ai', text:`my brain just lagged fr (${err.message}) 💀 try again later`, time: Date.now() });
     }
     setSending(false);
   }, [draft, sending, actions, store, messages]);
@@ -538,10 +637,19 @@ export const AiChat = () => {
               <div style={{
                 padding:'2px 8px', borderRadius:999, fontSize:9, fontWeight:700,
                 letterSpacing:'0.12em', textTransform:'uppercase',
-                background: sending ? 'rgba(240,107,28,.15)' : 'rgba(74,222,128,.1)',
-                color: sending ? 'var(--accent-orange)' : '#16a34a',
-                border: sending ? '0.5px solid rgba(240,107,28,.3)' : '0.5px solid rgba(74,222,128,.3)',
-              }}>{sending ? 'THINKING' : 'ONLINE'}</div>
+                display:'flex', alignItems:'center', gap:4,
+                background: sending ? 'rgba(240,107,28,.15)' : ollamaStatus.online ? 'rgba(74,222,128,.1)' : 'rgba(26,20,16,.08)',
+                color: sending ? 'var(--accent-orange)' : ollamaStatus.online ? '#16a34a' : 'var(--ink-3)',
+                border: sending ? '0.5px solid rgba(240,107,28,.3)' : ollamaStatus.online ? '0.5px solid rgba(74,222,128,.3)' : '0.5px solid rgba(26,20,16,.12)',
+              }}>
+                <div style={{
+                  width:5, height:5, borderRadius:'50%', flexShrink:0,
+                  background: sending ? 'var(--accent-orange)' : ollamaStatus.online ? '#4ade80' : 'rgba(26,20,16,.22)',
+                  boxShadow: sending ? '0 0 5px var(--accent-orange)' : ollamaStatus.online ? '0 0 5px #4ade80' : 'none',
+                  animation: ollamaStatus.online && !sending ? 'halo-breathe 2.5s ease-in-out infinite' : 'none',
+                }}/>
+                {sending ? 'THINKING' : ollamaStatus.online ? 'ONLINE' : 'SLEEPING'}
+              </div>
             </div>
             <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:2, flexWrap:'wrap' }}>
               {/* Ollama badge — click to toggle provider */}
@@ -603,7 +711,10 @@ export const AiChat = () => {
             <div className="fade-up" style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0, borderRadius:18, overflow:'hidden', background:'rgba(255,252,244,.7)', border:'0.5px solid rgba(255,255,255,.8)', boxShadow:'0 4px 24px rgba(46,30,12,.06)' }}>
               {/* Messages */}
               <div className="hermes-scroll" style={{ flex:1, overflowY:'auto', padding:'24px 22px', display:'flex', flexDirection:'column', gap:16 }}>
-                {messages.length === 0 && (
+                {messages.length === 0 && !ollamaStatus.online && (
+                  <HermesOfflineScreen model={ollamaModel}/>
+                )}
+                {messages.length === 0 && ollamaStatus.online && (
                   <div style={{ textAlign:'center', padding:'60px 20px', color:'var(--ink-3)' }}>
                     <HermesOrb size={80} thinking={false}/>
                     <div style={{ marginTop:24, fontSize:15, fontWeight:300, letterSpacing:'-0.02em' }}>I'm Hermes, your AI. Ask me anything.</div>
@@ -630,6 +741,14 @@ export const AiChat = () => {
                 <div ref={messagesEndRef}/>
               </div>
 
+              {/* Offline banner */}
+              {!ollamaStatus.online && messages.length > 0 && (
+                <div style={{ padding:'8px 20px', background:'rgba(26,20,16,.04)', borderTop:'0.5px solid rgba(26,20,16,.06)', display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+                  <div style={{ width:6, height:6, borderRadius:'50%', background:'rgba(26,20,16,.2)', flexShrink:0 }}/>
+                  <span style={{ fontSize:11.5, color:'var(--ink-3)' }}>Hermes is sleeping — run <code style={{ fontFamily:'monospace', background:'rgba(26,20,16,.06)', padding:'1px 5px', borderRadius:4 }}>ollama serve</code> to restore connection</span>
+                </div>
+              )}
+
               {/* Input */}
               <div style={{ padding:'12px 16px', borderTop:'0.5px solid rgba(26,20,16,.06)', background:'rgba(255,252,244,.5)' }}>
                 {voiceTranscript && (
@@ -641,7 +760,7 @@ export const AiChat = () => {
                   <input
                     ref={inputRef}
                     className="hermes-input"
-                    placeholder={sending ? 'Hermes is thinking…' : 'Ask Hermes anything — tasks, notes, inbox, habits, code…'}
+                    placeholder={sending ? 'Hermes is thinking…' : ollamaStatus.online ? 'Ask Hermes anything — tasks, notes, inbox, habits, code…' : 'Hermes is sleeping… start Ollama to wake me up'}
                     value={draft}
                     onChange={e => setDraft(e.target.value)}
                     onKeyDown={e => { if(e.key==='Enter' && !e.shiftKey && !sending) { e.preventDefault(); send(); }}}

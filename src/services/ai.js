@@ -4,6 +4,21 @@ import { callOllama, getOllamaModel } from './ollama.js';
 const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
 const FALLBACK_MODEL = 'mistralai/mistral-7b-instruct:free';
 
+const SLEEP_MESSAGES = [
+  "I'm sleeping right now... come back later 😴",
+  "Exhausted. My neural networks are at rest. Try again soon.",
+  "System hibernation mode — start Ollama to wake me up.",
+  "I'm dreaming. Can't think without mistral running locally.",
+  "Offline and resting. Run `ollama serve` in your terminal.",
+  "Taking a nap. My consciousness is temporarily suspended.",
+  "Not reachable right now. I'll be back when Ollama wakes up.",
+  "Disconnected from my brain. Give me a moment to come back.",
+];
+
+export function getRandomSleepMessage() {
+  return SLEEP_MESSAGES[Math.floor(Math.random() * SLEEP_MESSAGES.length)];
+}
+
 const TAG_KEYWORDS = {
   Fundraise: ['fundraise', 'investor', 'memo', 'seed', 'round', 'cap table', 'pitch', 'deck', 'valuation', 'money', 'raise'],
   Hiring: ['hire', 'hiring', 'candidate', 'interview', 'recruit', 'role', 'position', 'talks', 'founding', 'team', 'people'],
@@ -91,7 +106,14 @@ You can execute actions on the user's behalf by including them in your response 
 - [action: clearChat, {}]
 - [action: updateMemory, {"content":"User prefers to work in the morning. Main project: ..."}]
 
-Use updateMemory when the user tells you something important about themselves, their goals, or preferences that you should remember long-term. Place actions at the end of your response on their own line.
+Available Developer Actions (EXECUTES ON LOCAL OS):
+- [action: run_command, {"cmd": "..."}] (Runs a bash command locally)
+- [action: read_file, {"path": "..."}] (Reads a file from the filesystem)
+- [action: write_file, {"path": "...", "content": "..."}] (Writes to the filesystem)
+
+Use updateMemory when the user tells you something important about themselves, their goals, or preferences that you should remember long-term. 
+Use Developer Actions when the user asks you to act as an engineer, read code, or run terminal commands.
+Place actions at the end of your response on their own line.
 
 Current context:\n${contextStr}\n${extra}`.trim();
 }
@@ -212,13 +234,19 @@ export async function generateAiResponse(userMessage, context, history = []) {
     role: m.role === 'ai' ? 'assistant' : 'user',
     content: m.text,
   }));
+  
+  const finalUserMessage = dataAnswer 
+    ? `Here is what I found in the user's data for their question. Make it conversational and helpful:\n\nQuestion: ${userMessage}\n\nData: ${dataAnswer}`
+    : userMessage;
+
   const messages = [
     { role: 'system', content: system },
     ...historyMessages,
-    { role: 'user', content: `Here is what I found in the user's data for their question. Make it conversational and helpful:\n\nQuestion: ${userMessage}\n\nData: ${dataAnswer}` },
+    { role: 'user', content: finalUserMessage },
   ];
+  
   const result = await callAI(messages, 400);
-  return result || dataAnswer;
+  return result || dataAnswer || getRandomSleepMessage();
 }
 
 export async function generateEmailDraft(contact, context) {
@@ -367,50 +395,8 @@ function queryUserData(query, state) {
     return `${files.filter(f => f.progress >= 100).length} file(s) delivered.`;
   }
 
-  // ─── Check-in / greeting ───
-  if (/^(hello|hi|hey|good (morning|afternoon|evening)|sup|yo)$/i.test(q)) {
-    const h = now.getHours();
-    const greet = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
-    const greetings = [
-      `Hey! Good ${greet}. I'm here. What's on your mind?`,
-      `Hi there. Ready to get things done today?`,
-      `Hello! I've got your context loaded. How can I help?`,
-      `Hey. Good ${greet}! Anything specific you want to tackle?`
-    ];
-    return greetings[Math.floor(Math.random() * greetings.length)];
-  }
-
-  // ─── Small talk / How are you ───
-  if (/how are you|how do you do/i.test(q)) {
-    return "I'm doing great, thanks for asking! My memory cache is warm and I'm ready to execute. How are you doing today?";
-  }
-  if (/thank|thanks|appreciate/i.test(q)) {
-    return "You're very welcome! Let me know if you need anything else.";
-  }
-  
-  // ─── Gibberish / Too short ───
-  // If the query has no spaces and doesn't match known keywords, and looks like random typing
-  if (q.length < 15 && !/\s/.test(q) && !/task|note|event|contact/i.test(q)) {
-    const fallbacks = [
-      "Hmm, I didn't quite catch that. Could you rephrase?",
-      "Sorry, was that a typo? I'm listening.",
-      "I didn't understand that. You can ask me about your tasks, notes, or schedule!",
-      "Not sure I follow. Want me to pull up your agenda for the day?"
-    ];
-    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
-  }
-
   // ─── Default ───
-  const openTasks = (state.tasks || []).filter(t => t.status !== 'done').length;
-  const noteCount = (state.notes || []).length;
-  
-  const defaultReplies = [
-    `I'm not exactly sure what you mean. But I see you have ${openTasks} open tasks right now. Try asking me to schedule a meeting or create a task.`,
-    `I don't have a specific answer for that. As a reminder, you've got ${openTasks} pending tasks and ${noteCount} notes I can search through.`,
-    `I'm still learning! If you want, I can help you look up a contact, read a note, or manage your schedule.`,
-    `I didn't quite get that. Could you give me a bit more detail?`
-  ];
-  return defaultReplies[Math.floor(Math.random() * defaultReplies.length)];
+  return null;
 }
 
 export async function fetchAndSummarizeUrl(url) {
