@@ -1,26 +1,66 @@
 {
-  "name": "Build_PRO_MAX_1",
-  "short_name": "Build",
-  "description": "An execution OS for founders shipping product, fundraising, and hiring.",
+  "name": "Hermes — AI OS",
+  "short_name": "Hermes",
+  "description": "Your personal AI executive assistant. Chat, plan, remember — powered by Hermes.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "background_color": "#f6f1e5",
-  "theme_color": "#f6f1e5",
+  "theme_color": "#f06b1c",
   "orientation": "any",
+  "lang": "en",
+  "categories": ["productivity", "utilities", "personalization"],
   "icons": [
     {
-      "src": "/liquid_glass.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "src": "/favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
     },
     {
-      "src": "/liquid_glass.png",
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/hermes-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ],
-  "categories": ["productivity", "utilities"],
-  "lang": "en"
+  "shortcuts": [
+    {
+      "name": "Chat with Hermes",
+      "short_name": "Chat",
+      "url": "/?screen=ai",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Tasks",
+      "short_name": "Tasks",
+      "url": "/?screen=tasks",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "prefer_related_applications": false
 }

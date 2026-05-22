@@ -9,7 +9,8 @@ import { Auth } from './screens/Auth';
 import { logout } from './store/auth';
 import { AmbientVideo } from './components/effects/AmbientVideo';
 import { PageTransition } from './components/effects/PageTransition';
-import { FocusPanel } from './components/focus/FocusPanel';
+import { FocusPanel } from './components/focus/FocusPanel'
+import { ShaderAnimation } from './components/ui/ShaderAnimation';
 
 const AiChat = lazy(() => import('./screens/AiChat').then(m => ({ default: m.AiChat })));
 const Calendar = lazy(() => import('./screens/Calendar').then(m => ({ default: m.Calendar })));
@@ -226,16 +227,10 @@ export default function App() {
 
   return (
     <>
-      <div className={`paper ${t.canvas === 'mono' ? 'mono' : ''}`} />
-      <div className="gradient-mesh" aria-hidden="true" />
-      <div className="noise-overlay" aria-hidden="true" />
-      <AmbientVideo />
-
-      <div className="ambient" aria-hidden="true">
-        <div className="orb o1" />
-        <div className="orb o2" />
-      </div>
-      <div className="paper-edge" />
+      {/* ── Global shader background — always on ── */}
+      <ShaderAnimation style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />
+      {/* Dark scrim — brings down shader brightness so panels float cleanly */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 1, background: 'rgba(0,0,0,0.48)', pointerEvents: 'none' }} />
 
       <div
         ref={contentRef}
@@ -243,6 +238,7 @@ export default function App() {
         style={{
           position: 'fixed',
           inset: 0,
+          zIndex: 2,
           opacity: bootDone ? 1 : 0,
           transform: bootDone ? 'scale(1)' : 'scale(1.02)',
           transition: 'opacity 600ms ease-out, transform 600ms var(--ease-glass)',

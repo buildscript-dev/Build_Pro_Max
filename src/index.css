@@ -3,51 +3,69 @@
    ───────────────────────────────────────────────────────────────── */
 
 :root {
-  /* Paper canvas */
-  --paper-0: #f6f1e5;
-  --paper-1: #efe8d6;
-  --paper-2: #fbf8f0;
-  --paper-edge: #e6dec7;
-  --grain-opacity: 0.55;
+  /* ═══ DARK NEUTRAL + SHADER THEME ════════════════════════════
+     Neutral #0a0a0a base · Hermes orange accent · Shader bg
+  ══════════════════════════════════════════════════════════════ */
 
-  /* Ink */
-  --ink-1: #1a1410;
-  --ink-2: #4a3f33;
-  --ink-3: #7a6e5f;
-  --ink-4: #b3a890;
-  --ink-line: rgba(26, 20, 16, 0.08);
+  /* Surface layers */
+  --paper-0: #0a0a0a;
+  --paper-1: #111111;
+  --paper-2: #161616;
+  --paper-edge: #252525;
+  --grain-opacity: 0;
 
-  /* Accents */
-  --accent-amber: #f5a524;
-  --accent-orange: #f06b1c;
-  --accent-coral: #e7402e;
-  --accent-rose: #c2185b;
-  --accent-warm-bg: #fff5e6;
+  /* Text — crisp white scale */
+  --ink-1: #fafafa;
+  --ink-2: #a1a1a1;
+  --ink-3: #666666;
+  --ink-4: #404040;
+  --ink-line: rgba(255, 255, 255, 0.08);
+
+  /* Hermes brand accent (orange — kept intentionally, pops on neutral dark) */
+  --accent-amber:   #f5a524;
+  --accent-orange:  #f06b1c;
+  --accent-coral:   #e7402e;
+  --accent-rose:    #c2185b;
+  --accent-warm-bg: rgba(240, 107, 28, 0.12);
 
   /* Status */
-  --ok: #4a8f5e;
+  --ok:   #22c55e;
   --warn: #f5a524;
-  --risk: #e7402e;
-  --info: #2a6fdb;
+  --risk: #ef4444;
+  --info: #3b82f6;
 
-  /* Glass */
-  --glass-tint: rgba(255, 252, 244, 0.55);
-  --glass-tint-strong: rgba(255, 252, 244, 0.72);
-  --glass-edge: rgba(255, 255, 255, 0.75);
-  --glass-edge-low: rgba(255, 255, 255, 0.4);
-  --glass-shadow-soft: 0 2px 1px rgba(255,255,255,.85) inset,
-                       0 -1px 1px rgba(0,0,0,.04) inset,
-                       0 12px 32px -8px rgba(46, 30, 12, 0.18),
-                       0 2px 6px -2px rgba(46, 30, 12, 0.10);
-  --glass-shadow-strong: 0 2px 1px rgba(255,255,255,.95) inset,
-                         0 -1px 1px rgba(0,0,0,.06) inset,
-                         0 30px 60px -20px rgba(46, 30, 12, 0.35),
-                         0 12px 24px -8px rgba(46, 30, 12, 0.18),
-                         0 2px 6px -2px rgba(46, 30, 12, 0.10);
-  --glass-blur: 24px;
+  /* Dark glass panels */
+  --glass-tint:        rgba(20, 20, 20, 0.78);
+  --glass-tint-strong: rgba(12, 12, 12, 0.92);
+  --glass-edge:        rgba(255, 255, 255, 0.10);
+  --glass-edge-low:    rgba(255, 255, 255, 0.06);
+  --glass-shadow-soft:   0 1px 0 rgba(255,255,255,.06) inset,
+                         0 -1px 0 rgba(0,0,0,.20) inset,
+                         0 8px 32px rgba(0,0,0,.40),
+                         0 2px 8px rgba(0,0,0,.22);
+  --glass-shadow-strong: 0 1px 0 rgba(255,255,255,.10) inset,
+                         0 -1px 0 rgba(0,0,0,.25) inset,
+                         0 24px 48px rgba(0,0,0,.55),
+                         0 8px 20px rgba(0,0,0,.30);
+  --glass-blur: 28px;
+
+  /* Shadcn-compatible aliases (for future Tailwind integration) */
+  --background:  #0a0a0a;
+  --foreground:  #fafafa;
+  --card:        #191919;
+  --card-foreground: #fafafa;
+  --muted:       #262626;
+  --muted-foreground: #a1a1a1;
+  --border:      #383838;
+  --input:       #262626;
+  --primary:     #f06b1c;
+  --primary-foreground: #fafafa;
+  --secondary:   #1a1a1a;
+  --secondary-foreground: #fafafa;
+  --radius:      12px;
 
   /* Type */
-  --font-display: "Fraunces", "Cormorant Garamond", "Times New Roman", serif;
+  --font-display: "Fraunces", "Cormorant Garamond", serif;
   --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
@@ -135,7 +153,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
-  background: var(--paper-0);
+  /* Shader animation renders behind everything — body stays dark while it loads */
+  background: #050304;
 }
 
 /* ─── Paper canvas ─────────────────────────────────────────── */

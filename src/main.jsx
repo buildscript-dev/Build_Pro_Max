@@ -7,23 +7,31 @@ import App from './App.jsx'
 import './index.css'
 
 if ('serviceWorker' in navigator) {
-  if (import.meta.env.PROD) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => {
-        // Service worker registration failed — app still works without it
+  window.addEventListener('load', () => {
+    if (import.meta.env.PROD) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    } else {
+      // Dev: unregister any stale SW so Vite HMR is never intercepted
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((r) => r.unregister());
       });
-    });
-  } else {
-    // In dev, ensure any previously installed SW is unregistered so Vite HMR
-    // is never served stale modules from the SW cache.
-    navigator.serviceWorker.getRegistrations().then((regs) => {
-      regs.forEach((r) => r.unregister());
-    });
-    if (window.caches) {
-      caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+      if (window.caches) {
+        caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+      }
     }
-  }
+  });
 }
+
+// Prompt user to install PWA when browser fires beforeinstallprompt
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.__pwaInstallPrompt = e;
+  window.dispatchEvent(new CustomEvent('pwa-installable'));
+});
+window.addEventListener('appinstalled', () => {
+  window.__pwaInstallPrompt = null;
+  window.dispatchEvent(new CustomEvent('pwa-installed'));
+});
 
 const STORAGE_KEY = 'build_pro_max_1_state';
 const CHANNEL_NAME = 'build_pro_max_1_sync';

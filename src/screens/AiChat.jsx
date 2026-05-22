@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useResponsive } from '../hooks/useResponsive';
 import { GlassCard, PaperButton, Icon, AiOrb, Avatar } from '../components/ui/Icons';
 import { useAppState, useAppActions, useAppStore } from '../store/AppContext';
 import { generateAiResponse } from '../services/ai';
@@ -89,7 +90,7 @@ const StatusBadge = ({ label, value, color = 'var(--accent-orange)' }) => (
 
 /* ─── Glass Toggle Switch ─────────────────────────────────────── */
 const GlassToggle = ({ on, onChange, label, sub }) => (
-  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0', borderBottom:'0.5px solid rgba(26,20,16,.05)' }}>
+  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0', borderBottom:'0.5px solid rgba(255,255,255,.06)' }}>
     <div>
       <div style={{ fontSize:12.5, fontWeight:500, color:'var(--ink-1)' }}>{label}</div>
       {sub && <div style={{ fontSize:11, color:'var(--ink-3)', marginTop:2 }}>{sub}</div>}
@@ -143,38 +144,77 @@ const HabitRow = ({ habit, onToggle }) => {
   );
 };
 
+/* ─── SVG Glass Filter ─────────────────────────────────────────── */
+const GlassFilter = () => (
+  <svg style={{ display:'none' }} aria-hidden="true">
+    <defs>
+      <filter id="liquid-glass" x="0%" y="0%" width="100%" height="100%" colorInterpolationFilters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.65 0.65" numOctaves="1" seed="2" result="noise"/>
+        <feGaussianBlur in="noise" stdDeviation="1.5" result="blurred"/>
+        <feDisplacementMap in="SourceGraphic" in2="blurred" scale="5" xChannelSelector="R" yChannelSelector="G" result="displaced"/>
+        <feGaussianBlur in="displaced" stdDeviation="0.3" result="final"/>
+        <feComposite in="final" in2="final" operator="over"/>
+      </filter>
+    </defs>
+  </svg>
+)
+
 /* ─── Message Bubble ──────────────────────────────────────────── */
 const MessageBubble = ({ msg, onAction }) => {
   const isUser = msg.role === 'user';
   const isSystem = msg.role === 'system';
-  
+
+  if (isSystem) {
+    return (
+      <div style={{ display:'flex', gap:8, alignItems:'flex-start' }}>
+        <div style={{ width:20, height:20, borderRadius:6, flexShrink:0, background:'rgba(74,222,128,.12)', border:'0.5px solid rgba(74,222,128,.25)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, marginTop:2 }}>⚙</div>
+        <div style={{ flex:1, padding:'9px 14px', borderRadius:10, background:'rgba(4,10,6,.85)', border:'0.5px solid rgba(74,222,128,.18)', boxShadow:'0 2px 16px rgba(0,0,0,.5), inset 0 1px 0 rgba(74,222,128,.1)', fontFamily:'monospace', fontSize:11, color:'#4ade80', lineHeight:1.7, backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)' }}>
+          {msg.text}
+        </div>
+      </div>
+    );
+  }
+
+  const userBubble = {
+    background: 'rgba(240,107,28,0.15)',
+    backdropFilter: 'blur(24px) saturate(160%)',
+    WebkitBackdropFilter: 'blur(24px) saturate(160%)',
+    border: '0.5px solid rgba(245,165,36,0.30)',
+    boxShadow: '0 4px 24px rgba(240,107,28,0.15), inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(240,107,28,0.08), inset 0.5px 0 0 rgba(255,255,255,0.12)',
+    borderRadius: '20px 5px 20px 20px',
+  };
+
+  const aiBubble = {
+    background: 'rgba(255,255,255,0.07)',
+    backdropFilter: 'blur(28px) saturate(140%)',
+    WebkitBackdropFilter: 'blur(28px) saturate(140%)',
+    border: '0.5px solid rgba(255,255,255,0.13)',
+    boxShadow: '0 4px 24px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.12), inset 0.5px 0 0 rgba(255,255,255,0.10)',
+    borderRadius: '5px 20px 20px 20px',
+  };
+
   return (
-    <div style={{ display:'flex', gap:10, alignItems:'flex-start', flexDirection: isUser ? 'row-reverse' : 'row' }}>
+    <div style={{ display:'flex', gap:8, alignItems:'flex-end', flexDirection: isUser ? 'row-reverse' : 'row' }}>
       {isUser
-        ? <Avatar initials="U" color="orange" size={26}/>
-        : isSystem 
-          ? <div style={{ width:26, height:26, borderRadius:'50%', background:'rgba(26,20,16,.1)', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12 }}>⚙️</div>
-          : <div style={{ width:26, height:26, borderRadius:'50%', background:'radial-gradient(circle at 30% 30%,#fff,#f7d99a 30%,#f06b1c 65%,#c2185b)', flexShrink:0, boxShadow:'0 0 8px rgba(240,107,28,.4)' }}/>
+        ? <div style={{ width:26, height:26, borderRadius:'50%', flexShrink:0, background:'linear-gradient(135deg,#f5a524,#f06b1c)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, color:'#fff', boxShadow:'0 2px 10px rgba(240,107,28,.55)' }}>U</div>
+        : <div style={{ width:26, height:26, borderRadius:'50%', flexShrink:0, background:'radial-gradient(circle at 30% 30%,#fff,#f7d99a 30%,#f06b1c 65%,#c2185b)', boxShadow:'0 2px 12px rgba(240,107,28,.65)' }}/>
       }
-      <div style={{
-        maxWidth:'75%', padding:'11px 15px', borderRadius:16,
-        background: isSystem ? 'rgba(26,20,16,.85)' : isUser ? 'rgba(245,165,36,.15)' : 'rgba(255,252,244,.88)',
-        border: isSystem ? '0.5px solid rgba(26,20,16,.1)' : '0.5px solid rgba(255,255,255,.75)',
-        boxShadow: isSystem ? 'none' : '0 1px 0 rgba(255,255,255,.7) inset, 0 2px 8px -2px rgba(46,30,12,.08)',
-        borderBottomLeftRadius: !isUser ? 4 : 16,
-        borderBottomRightRadius: isUser ? 4 : 16,
-        color: isSystem ? '#4ade80' : 'var(--ink-1)',
-        fontFamily: isSystem ? 'monospace' : 'inherit',
-      }}>
-        <div style={{ fontSize:isSystem ? 11.5 : 13.5, lineHeight:1.6, whiteSpace:'pre-wrap' }}>{msg.text}</div>
+      <div style={{ maxWidth:'76%', padding:'11px 15px', ...(isUser ? userBubble : aiBubble) }}>
+        <div style={{ fontSize:13.5, lineHeight:1.65, whiteSpace:'pre-wrap', color:'rgba(255,248,240,0.92)' }}>{msg.text}</div>
         {msg.actions?.length > 0 && (
           <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:10 }}>
             {msg.actions.map((a,j) => (
-              <PaperButton key={j} small primary={j===0} onClick={() => onAction(a)}>{a}</PaperButton>
+              <button key={j} type="button" onClick={() => onAction(a)} style={{
+                padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:600, cursor:'pointer',
+                background: j===0 ? 'linear-gradient(135deg,#f5a524,#f06b1c)' : 'rgba(255,255,255,.08)',
+                color: j===0 ? '#fff' : 'rgba(255,248,240,.72)',
+                border: j===0 ? 'none' : '0.5px solid rgba(255,255,255,.14)',
+                boxShadow: j===0 ? '0 2px 8px rgba(240,107,28,.4)' : 'none',
+              }}>{a}</button>
             ))}
           </div>
         )}
-        <div style={{ fontSize:10, color: isSystem ? 'rgba(255,255,255,.4)' : 'var(--ink-3)', marginTop:6, textAlign: isUser ? 'right' : 'left' }}>
+        <div style={{ fontSize:10, color:'rgba(255,235,210,.35)', marginTop:6, textAlign: isUser ? 'right' : 'left' }}>
           {msg.time ? new Date(msg.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : ''}
         </div>
       </div>
@@ -224,13 +264,13 @@ const HermesOfflineScreen = ({ model }) => {
         <div style={{ fontSize:13.5, color:'var(--ink-3)', lineHeight:1.85, maxWidth:340 }}>{msg.sub}</div>
       </div>
 
-      <div style={{ padding:'11px 20px', borderRadius:12, background:'rgba(14,10,8,.06)', border:'0.5px solid rgba(26,20,16,.10)', fontSize:12.5, color:'var(--ink-2)', fontFamily:'monospace', display:'flex', alignItems:'center', gap:10 }}>
-        <span style={{ color:'var(--ink-3)' }}>$</span>
+      <div style={{ padding:'11px 20px', borderRadius:12, background:'rgba(255,255,255,.07)', border:'0.5px solid rgba(255,255,255,.12)', fontSize:12.5, color:'rgba(255,248,240,.72)', fontFamily:'monospace', display:'flex', alignItems:'center', gap:10, backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)' }}>
+        <span style={{ color:'rgba(255,235,210,.40)' }}>$</span>
         <span>{msg.cmd}</span>
       </div>
 
-      <div style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 12px', borderRadius:999, fontSize:10, fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', background:'rgba(26,20,16,.06)', color:'var(--ink-3)', border:'0.5px solid rgba(26,20,16,.09)' }}>
-        <div style={{ width:5, height:5, borderRadius:'50%', background:'rgba(26,20,16,.2)' }}/>
+      <div style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 12px', borderRadius:999, fontSize:10, fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', background:'rgba(255,255,255,.06)', color:'rgba(255,235,210,.42)', border:'0.5px solid rgba(255,255,255,.10)' }}>
+        <div style={{ width:5, height:5, borderRadius:'50%', background:'rgba(255,255,255,.2)' }}/>
         HERMES OFFLINE · {model || 'mistral'}
       </div>
     </div>
@@ -253,7 +293,7 @@ const LogLine = ({ line }) => {
 const InboxMsg = ({ msg, onReply }) => (
   <div style={{
     padding:'12px 14px', borderRadius:12, cursor:'pointer',
-    background: msg.unread ? 'rgba(245,165,36,.08)' : 'rgba(255,252,244,.5)',
+    background: msg.unread ? 'rgba(245,165,36,.10)' : 'rgba(255,255,255,.05)',
     border: msg.unread ? '0.5px solid rgba(245,165,36,.25)' : '0.5px solid rgba(26,20,16,.06)',
     transition:'all 150ms',
   }} onClick={onReply}>
@@ -272,7 +312,7 @@ const InboxMsg = ({ msg, onReply }) => (
 
 /* ─── Tab Bar ─────────────────────────────────────────────────── */
 const TabBar = ({ tabs, active, onSelect }) => (
-  <div style={{ display:'flex', gap:2, padding:'4px', borderRadius:12, background:'rgba(26,20,16,.06)', flexShrink:0 }}>
+  <div style={{ display:'flex', gap:2, padding:'4px', borderRadius:12, background:'rgba(255,255,255,.07)', border:'0.5px solid rgba(255,255,255,.09)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', flexShrink:0 }}>
     {tabs.map(t => (
       <button key={t.id} onClick={() => onSelect(t.id)} style={{
         padding:'7px 14px', borderRadius:9, fontSize:12, fontWeight: active===t.id ? 600 : 400,
@@ -293,6 +333,7 @@ const TabBar = ({ tabs, active, onSelect }) => (
    HERMES CONTROL CENTER — Main Component
 ══════════════════════════════════════════════════════════════ */
 export const AiChat = () => {
+  const { isMobile, isTablet } = useResponsive();
   const { actions } = useAppActions();
   const store = useAppStore();
   const messages = useAppState(s => s.chatMessages) || [];
@@ -307,6 +348,18 @@ export const AiChat = () => {
   const inputRef        = useRef(null);
   const voiceRef        = useRef(null);
   const ollamaOnlineRef = useRef(false);
+
+  const [pwaInstallable, setPwaInstallable] = useState(!!window.__pwaInstallPrompt);
+  useEffect(() => {
+    const onInstallable = () => setPwaInstallable(true);
+    const onInstalled   = () => setPwaInstallable(false);
+    window.addEventListener('pwa-installable', onInstallable);
+    window.addEventListener('pwa-installed',   onInstalled);
+    return () => {
+      window.removeEventListener('pwa-installable', onInstallable);
+      window.removeEventListener('pwa-installed',   onInstalled);
+    };
+  }, []);
 
   /* ── state ── */
   const [draft, setDraft]           = useState('');
@@ -621,117 +674,215 @@ export const AiChat = () => {
 
   /* ─── RENDER ───────────────────────────────────────────── */
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 80px)', maxHeight:'calc(100vh - 80px)', overflow:'hidden', padding:'0 24px 16px' }}>
+    <div className="hermes-root" style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 80px)', maxHeight:'calc(100vh - 80px)', overflow:'hidden', padding: isMobile ? '0 10px 10px' : '0 24px 16px' }}>
+      <GlassFilter />
       <style>{`
-        .hermes-scroll::-webkit-scrollbar { width: 4px; }
+        /* Scrollbars */
+        .hermes-scroll::-webkit-scrollbar { width: 3px; }
         .hermes-scroll::-webkit-scrollbar-track { background: transparent; }
-        .hermes-scroll::-webkit-scrollbar-thumb { background: rgba(26,20,16,.12); border-radius: 4px; }
-        .hermes-input { all: unset; flex:1; font-size:14px; color:var(--ink-1); font-family:var(--font-body); }
+        .hermes-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 3px; }
+
+        /* Inputs */
+        .hermes-input { all: unset; flex:1; font-size:14px; color:var(--ink-1); font-family:var(--font-sans); }
         .hermes-input::placeholder { color: var(--ink-3); }
-        .hermes-textarea { all: unset; width:100%; box-sizing:border-box; font-size:13px; color:var(--ink-1); font-family:var(--font-body); line-height:1.6; resize:none; }
+        .hermes-textarea { all: unset; width:100%; box-sizing:border-box; font-size:13px; color:var(--ink-1); font-family:var(--font-sans); line-height:1.6; resize:none; }
         .hermes-textarea::placeholder { color: var(--ink-3); }
+
+        /* Animations */
         @keyframes fade-in-up { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
         .fade-up { animation: fade-in-up 250ms var(--ease-glass) both; }
-        @media (max-width:767px) {
+        @keyframes shader-pulse { 0%,100%{opacity:.55} 50%{opacity:.85} }
+
+        /* Tab bar dark pill */
+        .hermes-tab-bar-bg { background: rgba(255,255,255,.06) !important; border: 0.5px solid rgba(255,255,255,.08) !important; }
+
+        /* ── Mobile / tablet responsiveness ── */
+        @media (max-width: 767px) {
           .hermes-main-grid { grid-template-columns: 1fr !important; }
-          .hermes-hud { display: none; }
+          .hermes-hud { display: none !important; }
+          .hermes-header-status { display: none !important; }
+          .hermes-tabs { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+          .hermes-tabs::-webkit-scrollbar { display: none; }
+          .hermes-tab-btn { white-space: nowrap; flex-shrink: 0; }
+          .hermes-input { font-size: 16px !important; }
+          .hermes-chat-input-row { padding: 8px 10px !important; }
+          .hermes-suggestions { display: none !important; }
+        }
+        @media (max-width: 480px) {
+          .hermes-root { padding: 0 10px 10px !important; }
+        }
+        @supports (padding-bottom: env(safe-area-inset-bottom)) {
+          .hermes-root { padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important; }
         }
       `}</style>
 
       {/* ── Header ── */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 0 12px', flexShrink:0 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-          <HermesOrb size={48} thinking={sending}/>
-          <div>
-            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <h1 style={{ fontSize:22, fontWeight:300, letterSpacing:'-0.03em', color:'var(--ink-1)', margin:0 }}>
-                Hermes<span style={{ color:'var(--accent-orange)', fontStyle:'italic' }}> AI</span>
-              </h1>
+      {isMobile ? (
+        /* ── MOBILE HEADER — single compact row ── */
+        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 0 10px', flexShrink:0 }}>
+          <HermesOrb size={36} thinking={sending}/>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <span style={{ fontSize:17, fontWeight:300, letterSpacing:'-0.03em', color:'var(--ink-1)' }}>
+                Hermes<span style={{ color:'var(--accent-orange)', fontStyle:'italic' }}>AI</span>
+              </span>
+              {/* compact online/offline pill */}
               <div style={{
-                padding:'2px 8px', borderRadius:999, fontSize:9, fontWeight:700,
-                letterSpacing:'0.12em', textTransform:'uppercase',
-                display:'flex', alignItems:'center', gap:4,
+                display:'flex', alignItems:'center', gap:3, padding:'2px 7px', borderRadius:999, fontSize:9, fontWeight:700,
+                letterSpacing:'0.1em', textTransform:'uppercase',
                 background: sending ? 'rgba(240,107,28,.15)' : ollamaStatus.online ? 'rgba(74,222,128,.1)' : 'rgba(26,20,16,.08)',
                 color: sending ? 'var(--accent-orange)' : ollamaStatus.online ? '#16a34a' : 'var(--ink-3)',
                 border: sending ? '0.5px solid rgba(240,107,28,.3)' : ollamaStatus.online ? '0.5px solid rgba(74,222,128,.3)' : '0.5px solid rgba(26,20,16,.12)',
               }}>
-                <div style={{
-                  width:5, height:5, borderRadius:'50%', flexShrink:0,
+                <div style={{ width:4, height:4, borderRadius:'50%', flexShrink:0,
                   background: sending ? 'var(--accent-orange)' : ollamaStatus.online ? '#4ade80' : 'rgba(26,20,16,.22)',
-                  boxShadow: sending ? '0 0 5px var(--accent-orange)' : ollamaStatus.online ? '0 0 5px #4ade80' : 'none',
-                  animation: ollamaStatus.online && !sending ? 'halo-breathe 2.5s ease-in-out infinite' : 'none',
+                  boxShadow: ollamaStatus.online && !sending ? '0 0 4px #4ade80' : 'none',
                 }}/>
                 {sending ? 'THINKING' : ollamaStatus.online ? 'ONLINE' : 'SLEEPING'}
               </div>
             </div>
-            <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:2, flexWrap:'wrap' }}>
-              {/* Ollama badge — click to toggle provider */}
-              <div title="Click to switch AI provider" onClick={() => {
-                const next = aiProvider === 'ollama' ? 'openrouter' : 'ollama';
-                setAiProvider(next); setAiProviderState(next);
-                actions.addNotification({ text:`Provider: ${next === 'ollama' ? ollamaModel + ' (local)' : 'OpenRouter cloud'}`, kind:'info' });
-              }} style={{
-                display:'flex', alignItems:'center', gap:4, padding:'2px 7px', borderRadius:999, fontSize:9, fontWeight:600,
-                letterSpacing:'0.1em', textTransform:'uppercase', cursor:'pointer',
-                background: ollamaStatus.online ? 'rgba(74,222,128,.12)' : 'rgba(26,20,16,.07)',
+            {/* model pill — small, below title */}
+            <div style={{ display:'flex', alignItems:'center', gap:4, marginTop:2 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:3, padding:'1px 6px', borderRadius:999, fontSize:8.5, fontWeight:600,
+                letterSpacing:'0.08em', textTransform:'uppercase',
+                background: ollamaStatus.online ? 'rgba(74,222,128,.1)' : 'rgba(26,20,16,.06)',
                 color: ollamaStatus.online ? '#16a34a' : 'var(--ink-3)',
-                border: ollamaStatus.online ? '0.5px solid rgba(74,222,128,.3)' : '0.5px solid rgba(26,20,16,.1)',
+                border: '0.5px solid rgba(26,20,16,.08)',
               }}>
-                <div style={{ width:5, height:5, borderRadius:'50%', background: ollamaStatus.online ? '#4ade80' : 'rgba(26,20,16,.2)', boxShadow: ollamaStatus.online ? '0 0 4px #4ade80' : 'none' }}/>
-                {ollamaStatus.online ? (aiProvider === 'ollama' ? ollamaModel : 'OpenRouter') : 'No Ollama'}
-              </div>
-              {/* Obsidian badge */}
-              <div style={{
-                display:'flex', alignItems:'center', gap:4, padding:'2px 7px', borderRadius:999, fontSize:9, fontWeight:600,
-                letterSpacing:'0.1em', textTransform:'uppercase',
-                background: obsidianOnline ? 'rgba(167,139,250,.12)' : 'rgba(26,20,16,.07)',
-                color: obsidianOnline ? '#a78bfa' : 'var(--ink-3)',
-                border: obsidianOnline ? '0.5px solid rgba(167,139,250,.3)' : '0.5px solid rgba(26,20,16,.1)',
-              }}>
-                <div style={{ width:5, height:5, borderRadius:'50%', background: obsidianOnline ? '#a78bfa' : 'rgba(26,20,16,.2)', boxShadow: obsidianOnline ? '0 0 4px #a78bfa' : 'none' }}/>
-                {obsidianOnline ? "Hermina's Memory" : 'Obsidian offline'}
+                <div style={{ width:4, height:4, borderRadius:'50%', background: ollamaStatus.online ? '#4ade80' : 'rgba(26,20,16,.2)' }}/>
+                {ollamaStatus.online ? ollamaModel : 'No Ollama'}
               </div>
             </div>
           </div>
+          {/* compact stat pills on mobile */}
+          <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
+            <div style={{ textAlign:'center' }}>
+              <div style={{ fontSize:8, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--ink-3)' }}>TASKS</div>
+              <div style={{ fontSize:11, fontWeight:700, color:'var(--accent-orange)', fontFamily:'monospace' }}>{openTasks}</div>
+            </div>
+            <div style={{ textAlign:'center' }}>
+              <div style={{ fontSize:8, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--ink-3)' }}>LOAD</div>
+              <div style={{ fontSize:11, fontWeight:700, color: cogLoad>70?'var(--accent-coral)':'var(--accent-orange)', fontFamily:'monospace' }}>{cogLoad}%</div>
+            </div>
+          </div>
+          {/* PWA install — icon only on mobile */}
+          {pwaInstallable && (
+            <button type="button" onClick={async () => {
+              const p = window.__pwaInstallPrompt; if (!p) return;
+              p.prompt();
+              const { outcome } = await p.userChoice;
+              if (outcome === 'accepted') { setPwaInstallable(false); window.__pwaInstallPrompt = null; }
+            }} style={{ width:32, height:32, borderRadius:10, flexShrink:0, cursor:'pointer',
+              background:'linear-gradient(135deg,#f5a524,#f06b1c)', color:'#fff',
+              border:'none', fontSize:15, display:'flex', alignItems:'center', justifyContent:'center',
+              boxShadow:'0 3px 10px rgba(240,107,28,.35)',
+            }}>⬇️</button>
+          )}
         </div>
-
-        {/* Status bar */}
-        <div style={{
-          display:'flex', gap:20, padding:'10px 18px', borderRadius:14,
-          background:'rgba(255,252,244,.7)', border:'0.5px solid rgba(255,255,255,.8)',
-          boxShadow:'0 2px 12px rgba(46,30,12,.06)',
-        }}>
-          <StatusBadge label="TASKS" value={`${openTasks}`}/>
-          <StatusBadge label="COG LOAD" value={`${cogLoad}%`} color={cogLoad>70?'var(--accent-coral)':'var(--accent-orange)'}/>
-          <StatusBadge label="MEMORY" value={`${notes.length}n`} color="#a78bfa"/>
-          <StatusBadge label="STREAK" value={`${habitStreak}d`} color="#4ade80"/>
+      ) : (
+        /* ── DESKTOP HEADER — full layout ── */
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 0 12px', flexShrink:0, gap:10 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+            <HermesOrb size={48} thinking={sending}/>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <h1 style={{ fontSize:22, fontWeight:300, letterSpacing:'-0.03em', color:'var(--ink-1)', margin:0 }}>
+                  Hermes<span style={{ color:'var(--accent-orange)', fontStyle:'italic' }}> AI</span>
+                </h1>
+                <div style={{
+                  padding:'2px 8px', borderRadius:999, fontSize:9, fontWeight:700,
+                  letterSpacing:'0.12em', textTransform:'uppercase',
+                  display:'flex', alignItems:'center', gap:4,
+                  background: sending ? 'rgba(240,107,28,.15)' : ollamaStatus.online ? 'rgba(74,222,128,.1)' : 'rgba(26,20,16,.08)',
+                  color: sending ? 'var(--accent-orange)' : ollamaStatus.online ? '#16a34a' : 'var(--ink-3)',
+                  border: sending ? '0.5px solid rgba(240,107,28,.3)' : ollamaStatus.online ? '0.5px solid rgba(74,222,128,.3)' : '0.5px solid rgba(26,20,16,.12)',
+                }}>
+                  <div style={{ width:5, height:5, borderRadius:'50%', flexShrink:0,
+                    background: sending ? 'var(--accent-orange)' : ollamaStatus.online ? '#4ade80' : 'rgba(26,20,16,.22)',
+                    boxShadow: sending ? '0 0 5px var(--accent-orange)' : ollamaStatus.online ? '0 0 5px #4ade80' : 'none',
+                    animation: ollamaStatus.online && !sending ? 'halo-breathe 2.5s ease-in-out infinite' : 'none',
+                  }}/>
+                  {sending ? 'THINKING' : ollamaStatus.online ? 'ONLINE' : 'SLEEPING'}
+                </div>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:2, flexWrap:'wrap' }}>
+                <div title="Click to switch AI provider" onClick={() => {
+                  const next = aiProvider === 'ollama' ? 'openrouter' : 'ollama';
+                  setAiProvider(next); setAiProviderState(next);
+                  actions.addNotification({ text:`Provider: ${next === 'ollama' ? ollamaModel + ' (local)' : 'OpenRouter cloud'}`, kind:'info' });
+                }} style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 7px', borderRadius:999, fontSize:9, fontWeight:600,
+                  letterSpacing:'0.1em', textTransform:'uppercase', cursor:'pointer',
+                  background: ollamaStatus.online ? 'rgba(74,222,128,.12)' : 'rgba(26,20,16,.07)',
+                  color: ollamaStatus.online ? '#16a34a' : 'var(--ink-3)',
+                  border: ollamaStatus.online ? '0.5px solid rgba(74,222,128,.3)' : '0.5px solid rgba(26,20,16,.1)',
+                }}>
+                  <div style={{ width:5, height:5, borderRadius:'50%', background: ollamaStatus.online ? '#4ade80' : 'rgba(26,20,16,.2)', boxShadow: ollamaStatus.online ? '0 0 4px #4ade80' : 'none' }}/>
+                  {ollamaStatus.online ? (aiProvider === 'ollama' ? ollamaModel : 'OpenRouter') : 'No Ollama'}
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 7px', borderRadius:999, fontSize:9, fontWeight:600,
+                  letterSpacing:'0.1em', textTransform:'uppercase',
+                  background: obsidianOnline ? 'rgba(167,139,250,.12)' : 'rgba(26,20,16,.07)',
+                  color: obsidianOnline ? '#a78bfa' : 'var(--ink-3)',
+                  border: obsidianOnline ? '0.5px solid rgba(167,139,250,.3)' : '0.5px solid rgba(26,20,16,.1)',
+                }}>
+                  <div style={{ width:5, height:5, borderRadius:'50%', background: obsidianOnline ? '#a78bfa' : 'rgba(26,20,16,.2)', boxShadow: obsidianOnline ? '0 0 4px #a78bfa' : 'none' }}/>
+                  {obsidianOnline ? "Hermina's Memory" : 'Obsidian offline'}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:20, padding:'10px 18px', borderRadius:14,
+            background:'rgba(255,255,255,.07)', border:'0.5px solid rgba(255,255,255,.12)',
+            backdropFilter:'blur(24px)', WebkitBackdropFilter:'blur(24px)',
+            boxShadow:'0 4px 20px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.1)',
+          }}>
+            <StatusBadge label="TASKS" value={`${openTasks}`}/>
+            <StatusBadge label="COG LOAD" value={`${cogLoad}%`} color={cogLoad>70?'var(--accent-coral)':'var(--accent-orange)'}/>
+            <StatusBadge label="MEMORY" value={`${notes.length}n`} color="#a78bfa"/>
+            <StatusBadge label="STREAK" value={`${habitStreak}d`} color="#4ade80"/>
+          </div>
+          {pwaInstallable && (
+            <button type="button" onClick={async () => {
+              const p = window.__pwaInstallPrompt; if (!p) return;
+              p.prompt();
+              const { outcome } = await p.userChoice;
+              if (outcome === 'accepted') { setPwaInstallable(false); window.__pwaInstallPrompt = null;
+                actions.addNotification({ text:'Hermes installed to your home screen!', kind:'info' }); }
+            }} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:12, cursor:'pointer',
+              background:'linear-gradient(135deg,#f5a524,#f06b1c)', color:'#fff', border:'none',
+              fontSize:11.5, fontWeight:600, letterSpacing:'0.04em',
+              boxShadow:'0 4px 14px rgba(240,107,28,.35)', flexShrink:0,
+            }}>
+              <span style={{ fontSize:14 }}>⬇️</span>Install App
+            </button>
+          )}
         </div>
-      </div>
+      )}
 
       {/* ── Tab Bar ── */}
-      <div style={{ marginBottom:12, flexShrink:0 }}>
+      <div className="hermes-tabs" style={{ marginBottom:12, flexShrink:0 }}>
         <TabBar tabs={TABS} active={activeTab} onSelect={setActiveTab}/>
       </div>
 
       {/* ── Main Grid ── */}
-      <div className="hermes-main-grid" style={{ display:'grid', gridTemplateColumns:'1fr 300px', gap:14, flex:1, minHeight:0, overflow:'hidden' }}>
+      <div className="hermes-main-grid" style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 300px', gap:14, flex:1, minHeight:0, overflow:'hidden' }}>
 
         {/* ════════ LEFT — Main Panel ════════ */}
         <div style={{ display:'flex', flexDirection:'column', minHeight:0, overflow:'hidden' }}>
 
           {/* ── CHAT TAB ── */}
           {activeTab === 'chat' && (
-            <div className="fade-up" style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0, borderRadius:18, overflow:'hidden', background:'rgba(255,252,244,.7)', border:'0.5px solid rgba(255,255,255,.8)', boxShadow:'0 4px 24px rgba(46,30,12,.06)' }}>
+            <div className="fade-up" style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0, borderRadius:20, overflow:'hidden', background:'rgba(10,7,4,.60)', backdropFilter:'blur(40px) saturate(120%)', WebkitBackdropFilter:'blur(40px) saturate(120%)', border:'0.5px solid rgba(255,255,255,.10)', boxShadow:'0 8px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08), inset 0 -1px 0 rgba(0,0,0,.15)' }}>
               {/* Messages */}
               <div className="hermes-scroll" style={{ flex:1, overflowY:'auto', padding:'24px 22px', display:'flex', flexDirection:'column', gap:16 }}>
                 {messages.length === 0 && !ollamaStatus.online && (
                   <HermesOfflineScreen model={ollamaModel}/>
                 )}
                 {messages.length === 0 && ollamaStatus.online && (
-                  <div style={{ textAlign:'center', padding:'60px 20px', color:'var(--ink-3)' }}>
+                  <div style={{ textAlign:'center', padding:'60px 20px' }}>
                     <HermesOrb size={80} thinking={false}/>
-                    <div style={{ marginTop:24, fontSize:15, fontWeight:300, letterSpacing:'-0.02em' }}>I'm Hermes, your AI. Ask me anything.</div>
-                    <div style={{ marginTop:8, fontSize:12, color:'var(--ink-3)' }}>Tasks · Notes · Gmail · Habits · Build · Voice</div>
+                    <div style={{ marginTop:24, fontSize:15, fontWeight:300, letterSpacing:'-0.02em', color:'rgba(255,248,240,.85)' }}>I'm Hermes, your AI. Ask me anything.</div>
+                    <div style={{ marginTop:8, fontSize:12, color:'rgba(255,228,200,.42)' }}>Tasks · Notes · Gmail · Habits · Build · Voice</div>
                   </div>
                 )}
                 {messages.map((m, i) => (
@@ -741,8 +892,8 @@ export const AiChat = () => {
                 ))}
                 {sending && (
                   <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-                    <div style={{ width:26, height:26, borderRadius:'50%', background:'radial-gradient(circle at 30% 30%,#fff,#f7d99a 30%,#f06b1c 65%,#c2185b)', flexShrink:0 }}/>
-                    <div style={{ padding:'11px 15px', borderRadius:16, borderBottomLeftRadius:4, background:'rgba(255,252,244,.88)', border:'0.5px solid rgba(255,255,255,.75)' }}>
+                    <div style={{ width:26, height:26, borderRadius:'50%', background:'radial-gradient(circle at 30% 30%,#fff,#f7d99a 30%,#f06b1c 65%,#c2185b)', flexShrink:0, boxShadow:'0 2px 12px rgba(240,107,28,.6)' }}/>
+                    <div style={{ padding:'11px 15px', borderRadius:16, borderBottomLeftRadius:4, background:'rgba(255,255,255,.07)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', border:'0.5px solid rgba(255,255,255,.13)' }}>
                       <div style={{ display:'flex', gap:5, alignItems:'center' }}>
                         {[0,1,2].map(i => (
                           <div key={i} style={{ width:6, height:6, borderRadius:'50%', background:'var(--accent-orange)', animation:`hermes-dot 0.8s ${i*0.2}s ease-in-out infinite` }}/>
@@ -756,20 +907,20 @@ export const AiChat = () => {
 
               {/* Offline banner */}
               {!ollamaStatus.online && messages.length > 0 && (
-                <div style={{ padding:'8px 20px', background:'rgba(26,20,16,.04)', borderTop:'0.5px solid rgba(26,20,16,.06)', display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
-                  <div style={{ width:6, height:6, borderRadius:'50%', background:'rgba(26,20,16,.2)', flexShrink:0 }}/>
-                  <span style={{ fontSize:11.5, color:'var(--ink-3)' }}>Hermes is sleeping — run <code style={{ fontFamily:'monospace', background:'rgba(26,20,16,.06)', padding:'1px 5px', borderRadius:4 }}>ollama serve</code> to restore connection</span>
+                <div style={{ padding:'8px 20px', background:'rgba(255,255,255,.04)', borderTop:'0.5px solid rgba(255,255,255,.07)', display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+                  <div style={{ width:6, height:6, borderRadius:'50%', background:'rgba(255,255,255,.2)', flexShrink:0 }}/>
+                  <span style={{ fontSize:11.5, color:'rgba(255,228,200,.45)' }}>Hermes is sleeping — run <code style={{ fontFamily:'monospace', background:'rgba(255,255,255,.07)', padding:'1px 5px', borderRadius:4, color:'rgba(255,248,240,.7)' }}>ollama serve</code> to restore connection</span>
                 </div>
               )}
 
               {/* Input */}
-              <div style={{ padding:'12px 16px', borderTop:'0.5px solid rgba(26,20,16,.06)', background:'rgba(255,252,244,.5)' }}>
+              <div style={{ padding: isMobile ? '8px 10px' : '12px 16px', borderTop:'0.5px solid rgba(255,255,255,.07)', background:'rgba(8,5,3,.50)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)' }}>
                 {voiceTranscript && (
                   <div style={{ marginBottom:8, padding:'6px 10px', borderRadius:8, background:'rgba(240,107,28,.08)', fontSize:12, color:'var(--accent-orange)', fontStyle:'italic' }}>
                     🎙️ {voiceTranscript}
                   </div>
                 )}
-                <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', borderRadius:14, background:'rgba(255,252,244,.9)', border:'0.5px solid rgba(255,255,255,.9)', boxShadow:'0 2px 8px rgba(46,30,12,.05)' }}>
+                <div className="hermes-chat-input-row" style={{ display:'flex', alignItems:'center', gap: isMobile ? 6 : 10, padding: isMobile ? '8px 10px' : '10px 16px', borderRadius:14, background:'rgba(255,255,255,.07)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', border:'0.5px solid rgba(255,255,255,.14)', boxShadow:'0 2px 16px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 0 rgba(0,0,0,.12)' }}>
                   <input
                     ref={inputRef}
                     className="hermes-input"
@@ -785,10 +936,10 @@ export const AiChat = () => {
                     onClick={isListening ? stopListening : startListening}
                     style={{
                       width:32, height:32, borderRadius:'50%', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center',
-                      background: isListening ? 'rgba(231,64,46,.15)' : 'rgba(26,20,16,.05)',
-                      border: isListening ? '1.5px solid var(--accent-coral)' : '0.5px solid rgba(26,20,16,.10)',
+                      background: isListening ? 'rgba(231,64,46,.22)' : 'rgba(255,255,255,.07)',
+                      border: isListening ? '1.5px solid var(--accent-coral)' : '0.5px solid rgba(255,255,255,.12)',
                       animation: isListening ? 'hermes-pulse 1s ease-in-out infinite' : 'none',
-                      color: isListening ? 'var(--accent-coral)' : 'var(--ink-3)',
+                      color: isListening ? 'var(--accent-coral)' : 'rgba(255,228,200,.5)',
                     }}
                   >
                     🎙️
@@ -797,15 +948,17 @@ export const AiChat = () => {
                     {sending ? '…' : 'Send'}
                   </PaperButton>
                 </div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:10 }}>
-                  {['What are my P0 tasks?','Create a note about my goals','Plan my day','Check my habits','Build status'].map(s => (
-                    <button key={s} type="button" onClick={() => { setDraft(s); inputRef.current?.focus(); }}
-                      style={{ padding:'4px 10px', borderRadius:20, fontSize:11.5, color:'var(--ink-2)', background:'rgba(26,20,16,.05)', border:'0.5px solid rgba(26,20,16,.08)', cursor:'pointer', transition:'all 120ms' }}
-                      onMouseEnter={e => { e.currentTarget.style.background='rgba(245,165,36,.12)'; e.currentTarget.style.color='var(--accent-orange)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background='rgba(26,20,16,.05)'; e.currentTarget.style.color='var(--ink-2)'; }}
-                    >{s}</button>
-                  ))}
-                </div>
+                {!isMobile && (
+                  <div className="hermes-suggestions" style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:10 }}>
+                    {['What are my P0 tasks?','Create a note about my goals','Plan my day','Check my habits','Build status'].map(s => (
+                      <button key={s} type="button" onClick={() => { setDraft(s); inputRef.current?.focus(); }}
+                        style={{ padding:'4px 10px', borderRadius:20, fontSize:11.5, color:'var(--ink-2)', background:'rgba(26,20,16,.05)', border:'0.5px solid rgba(26,20,16,.08)', cursor:'pointer', transition:'all 120ms' }}
+                        onMouseEnter={e => { e.currentTarget.style.background='rgba(245,165,36,.12)'; e.currentTarget.style.color='var(--accent-orange)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background='rgba(26,20,16,.05)'; e.currentTarget.style.color='var(--ink-2)'; }}
+                      >{s}</button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -839,7 +992,7 @@ export const AiChat = () => {
                     placeholder="Obsidian API key (from Local REST API plugin)"
                     value={obsidianApiKey}
                     onChange={e => setObsidianApiKey(e.target.value)}
-                    style={{ flex:1, padding:'9px 12px', borderRadius:9, background:'rgba(255,252,244,.8)', border:'0.5px solid rgba(26,20,16,.10)', fontSize:12.5, color:'var(--ink-1)' }}
+                    style={{ flex:1, padding:'9px 12px', borderRadius:9, background:'rgba(255,255,255,.07)', border:'0.5px solid rgba(255,255,255,.12)', fontSize:12.5 }}
                   />
                   <PaperButton small onClick={() => {
                     localStorage.setItem('obsidian_api_key', obsidianApiKey);
@@ -853,7 +1006,7 @@ export const AiChat = () => {
                   placeholder="Vault folder (default: Hermes)"
                   value={obsidianVaultPath}
                   onChange={e => setObsidianVaultPath(e.target.value)}
-                  style={{ display:'block', width:'100%', padding:'9px 12px', borderRadius:9, background:'rgba(255,252,244,.8)', border:'0.5px solid rgba(26,20,16,.10)', fontSize:12.5, color:'var(--ink-1)', boxSizing:'border-box' }}
+                  style={{ display:'block', width:'100%', padding:'9px 12px', borderRadius:9, background:'rgba(255,255,255,.07)', border:'0.5px solid rgba(255,255,255,.12)', fontSize:12.5, boxSizing:'border-box' }}
                 />
                 {obsidianOnline && (
                   <div style={{ marginTop:10, display:'flex', gap:8 }}>
@@ -890,10 +1043,10 @@ export const AiChat = () => {
                     rows={14}
                     value={memoryDraft}
                     onChange={e => setMemoryDraft(e.target.value)}
-                    style={{ padding:'12px 14px', borderRadius:10, background:'rgba(255,252,244,.9)', border:'0.5px solid rgba(240,107,28,.25)', fontSize:12.5, fontFamily:'var(--font-mono,monospace)', lineHeight:1.7 }}
+                    style={{ padding:'12px 14px', borderRadius:10, background:'rgba(255,255,255,.07)', border:'0.5px solid rgba(240,107,28,.30)', fontSize:12.5, fontFamily:'var(--font-mono,monospace)', lineHeight:1.7 }}
                   />
                 ) : (
-                  <div style={{ padding:'12px 14px', borderRadius:10, background:'rgba(255,252,244,.6)', border:'0.5px solid rgba(26,20,16,.08)', fontSize:12.5, color:'var(--ink-2)', lineHeight:1.7, fontFamily:'var(--font-mono,monospace)', whiteSpace:'pre-wrap', minHeight:120 }}>
+                  <div style={{ padding:'12px 14px', borderRadius:10, background:'rgba(255,255,255,.05)', border:'0.5px solid rgba(255,255,255,.09)', fontSize:12.5, color:'rgba(255,238,218,.65)', lineHeight:1.7, fontFamily:'var(--font-mono,monospace)', whiteSpace:'pre-wrap', minHeight:120 }}>
                     {memoryProfile || <span style={{ color:'var(--ink-3)', fontStyle:'italic' }}>No profile yet — click Edit to fill it in</span>}
                   </div>
                 )}
@@ -910,7 +1063,7 @@ export const AiChat = () => {
                   placeholder="Note title…"
                   value={newNote.title}
                   onChange={e => setNewNote(p => ({...p, title:e.target.value}))}
-                  style={{ display:'block', width:'100%', marginBottom:10, padding:'10px 14px', borderRadius:10, background:'rgba(255,252,244,.8)', border:'0.5px solid rgba(26,20,16,.10)', fontSize:14, color:'var(--ink-1)', boxSizing:'border-box' }}
+                  style={{ display:'block', width:'100%', marginBottom:10, padding:'10px 14px', borderRadius:10, background:'rgba(255,255,255,.07)', border:'0.5px solid rgba(255,255,255,.12)', fontSize:14, boxSizing:'border-box' }}
                 />
                 <textarea
                   className="hermes-textarea"
@@ -918,7 +1071,7 @@ export const AiChat = () => {
                   placeholder="Write anything — Hermes will tag and index it…"
                   value={newNote.content}
                   onChange={e => setNewNote(p => ({...p, content:e.target.value}))}
-                  style={{ padding:'10px 14px', borderRadius:10, background:'rgba(255,252,244,.8)', border:'0.5px solid rgba(26,20,16,.10)', marginBottom:10 }}
+                  style={{ padding:'10px 14px', borderRadius:10, background:'rgba(255,255,255,.07)', border:'0.5px solid rgba(255,255,255,.12)', marginBottom:10 }}
                 />
                 <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
                   {['Inbox','Work','Personal','Ideas','Reading','Goals'].map(tag => (
@@ -943,7 +1096,7 @@ export const AiChat = () => {
                     { label:'Contacts', val:contacts.length, icon:'👥', color:'var(--accent-coral)' },
                     { label:'Goals', val:goals.length, icon:'🎯', color:'#4ade80' },
                   ].map(item => (
-                    <div key={item.label} style={{ padding:'14px', borderRadius:12, background:'rgba(255,252,244,.6)', border:'0.5px solid rgba(255,255,255,.7)', textAlign:'center' }}>
+                    <div key={item.label} style={{ padding:'14px', borderRadius:12, background:'rgba(255,255,255,.05)', border:'0.5px solid rgba(255,255,255,.09)', textAlign:'center' }}>
                       <div style={{ fontSize:22 }}>{item.icon}</div>
                       <div style={{ fontSize:22, fontWeight:300, color:item.color, letterSpacing:'-0.04em', marginTop:2 }}>{item.val}</div>
                       <div style={{ fontSize:10.5, color:'var(--ink-3)', letterSpacing:'0.08em', textTransform:'uppercase' }}>{item.label}</div>
@@ -1013,7 +1166,7 @@ export const AiChat = () => {
                   placeholder="🎯 Today's Big Rock — one thing that defines a great day"
                   value={dayPlan.bigRock}
                   onChange={e => setDayPlan(p => ({...p, bigRock:e.target.value}))}
-                  style={{ display:'block', width:'100%', marginBottom:10, padding:'10px 14px', borderRadius:10, background:'rgba(255,252,244,.8)', border:'0.5px solid rgba(26,20,16,.10)', fontSize:14, color:'var(--ink-1)', boxSizing:'border-box', fontWeight:500 }}
+                  style={{ display:'block', width:'100%', marginBottom:10, padding:'10px 14px', borderRadius:10, background:'rgba(255,255,255,.07)', border:'0.5px solid rgba(255,255,255,.12)', fontSize:14, boxSizing:'border-box', fontWeight:500 }}
                 />
                 <textarea
                   className="hermes-textarea"
@@ -1021,7 +1174,7 @@ export const AiChat = () => {
                   placeholder="🌅 Morning intention — how do you want to feel today?"
                   value={dayPlan.morningNote}
                   onChange={e => setDayPlan(p => ({...p, morningNote:e.target.value}))}
-                  style={{ padding:'10px 14px', borderRadius:10, background:'rgba(255,252,244,.8)', border:'0.5px solid rgba(26,20,16,.10)', marginBottom:10 }}
+                  style={{ padding:'10px 14px', borderRadius:10, background:'rgba(255,255,255,.07)', border:'0.5px solid rgba(255,255,255,.12)', marginBottom:10 }}
                 />
                 <PaperButton primary small onClick={() => {
                   if(dayPlan.bigRock) { actions.addNote({ title:`Daily Plan: ${dayPlan.bigRock}`, content:`Big Rock: ${dayPlan.bigRock}\n\n${dayPlan.morningNote}`, tag:'Pages', icon:'notes' }); actions.addNotification({ text:'Day plan saved to notes', kind:'info' }); setDayPlan({ bigRock:'', morningNote:'', eveningNote:'' }); }
@@ -1065,7 +1218,7 @@ export const AiChat = () => {
               <GlassCard strong>
                 <div className="t-cap" style={{ color:'var(--accent-orange)', marginBottom:12 }}>🚀 Build Tracker</div>
                 {buildItems.map(item => (
-                  <div key={item.id} style={{ marginBottom:16, padding:'14px', borderRadius:12, background:'rgba(255,252,244,.6)', border:'0.5px solid rgba(255,255,255,.7)' }}>
+                  <div key={item.id} style={{ marginBottom:16, padding:'14px', borderRadius:12, background:'rgba(255,255,255,.05)', border:'0.5px solid rgba(255,255,255,.09)' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
                       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                         <div style={{ width:8, height:8, borderRadius:'50%', background: item.status==='in-progress'?'var(--accent-orange)':item.status==='done'?'#4ade80':'rgba(26,20,16,.2)', boxShadow: item.status==='in-progress'?'0 0 6px var(--accent-orange)':undefined }}/>
@@ -1137,9 +1290,9 @@ export const AiChat = () => {
                 {['Plan my day','What are my tasks?','Create a note','Check my habits','How am I doing?'].map(p => (
                   <button key={p} type="button"
                     onClick={() => { setDraft(p); setActiveTab('chat'); setTimeout(()=>{ inputRef.current?.focus(); send(p); },100); }}
-                    style={{ padding:'8px 14px', borderRadius:20, fontSize:12, color:'var(--ink-2)', background:'rgba(255,252,244,.8)', border:'0.5px solid rgba(26,20,16,.08)', cursor:'pointer', transition:'all 120ms', backdropFilter:'blur(8px)' }}
-                    onMouseEnter={e => e.currentTarget.style.background='rgba(245,165,36,.12)'}
-                    onMouseLeave={e => e.currentTarget.style.background='rgba(255,252,244,.8)'}
+                    style={{ padding:'8px 14px', borderRadius:20, fontSize:12, color:'rgba(255,238,218,.7)', background:'rgba(255,255,255,.07)', border:'0.5px solid rgba(255,255,255,.12)', cursor:'pointer', transition:'all 120ms', backdropFilter:'blur(8px)' }}
+                    onMouseEnter={e => e.currentTarget.style.background='rgba(245,165,36,.18)'}
+                    onMouseLeave={e => e.currentTarget.style.background='rgba(255,255,255,.07)'}
                   >{p}</button>
                 ))}
               </div>
@@ -1147,14 +1300,15 @@ export const AiChat = () => {
           )}
         </div>
 
-        {/* ════════ RIGHT — HUD ════════ */}
-        <div className="hermes-hud" style={{ display:'flex', flexDirection:'column', gap:12, overflow:'hidden' }}>
+        {/* ════════ RIGHT — HUD (desktop only) ════════ */}
+        {!isMobile && <div className="hermes-hud" style={{ display:'flex', flexDirection:'column', gap:12, overflow:'hidden' }}>
 
           {/* Consciousness Orb */}
           <div style={{
             padding:'20px 16px', borderRadius:18, textAlign:'center',
-            background:'rgba(255,252,244,.75)', border:'0.5px solid rgba(255,255,255,.85)',
-            boxShadow:'0 4px 24px rgba(46,30,12,.05)',
+            background:'rgba(10,7,4,.65)', border:'0.5px solid rgba(255,255,255,.10)',
+            backdropFilter:'blur(32px)', WebkitBackdropFilter:'blur(32px)',
+            boxShadow:'0 8px 32px rgba(0,0,0,.40), inset 0 1px 0 rgba(255,255,255,.07)',
           }}>
             <HermesOrb size={80} thinking={sending}/>
             <div style={{ marginTop:16, fontSize:10, letterSpacing:'0.14em', textTransform:'uppercase', color:'var(--ink-3)' }}>
@@ -1169,11 +1323,11 @@ export const AiChat = () => {
           </div>
 
           {/* Policy controller */}
-          <div style={{ padding:'16px', borderRadius:18, background:'rgba(255,252,244,.75)', border:'0.5px solid rgba(255,255,255,.85)', boxShadow:'0 4px 24px rgba(46,30,12,.05)' }}>
+          <div style={{ padding:'16px', borderRadius:18, background:'rgba(10,7,4,.65)', border:'0.5px solid rgba(255,255,255,.10)', backdropFilter:'blur(32px)', WebkitBackdropFilter:'blur(32px)', boxShadow:'0 8px 32px rgba(0,0,0,.40), inset 0 1px 0 rgba(255,255,255,.07)' }}>
             <div className="t-cap" style={{ marginBottom:8 }}>⚙️ Hermes Policy</div>
 
             {/* AI Engine selector */}
-            <div style={{ marginBottom:10, padding:'10px 12px', borderRadius:10, background: ollamaStatus.online ? 'rgba(74,222,128,.06)' : 'rgba(26,20,16,.04)', border: ollamaStatus.online ? '0.5px solid rgba(74,222,128,.2)' : '0.5px solid rgba(26,20,16,.08)' }}>
+            <div style={{ marginBottom:10, padding:'10px 12px', borderRadius:10, background: ollamaStatus.online ? 'rgba(74,222,128,.08)' : 'rgba(255,255,255,.04)', border: ollamaStatus.online ? '0.5px solid rgba(74,222,128,.22)' : '0.5px solid rgba(255,255,255,.08)' }}>
               <div style={{ fontSize:11, fontWeight:600, color:'var(--ink-2)', marginBottom:6 }}>AI Engine</div>
               <div style={{ display:'flex', gap:6 }}>
                 {[
@@ -1182,16 +1336,16 @@ export const AiChat = () => {
                 ].map(opt => (
                   <button key={opt.id} type="button" disabled={opt.disabled} onClick={() => { setAiProvider(opt.id); setAiProviderState(opt.id); }} style={{
                     flex:1, padding:'5px 0', borderRadius:8, fontSize:10.5, fontWeight:600, cursor: opt.disabled ? 'not-allowed' : 'pointer',
-                    background: aiProvider === opt.id ? 'linear-gradient(135deg,#4ade80,#16a34a)' : 'rgba(26,20,16,.06)',
-                    color: aiProvider === opt.id ? '#fff' : opt.disabled ? 'var(--ink-3)' : 'var(--ink-2)',
-                    border: aiProvider === opt.id ? '0.5px solid rgba(74,222,128,.4)' : '0.5px solid transparent',
-                    opacity: opt.disabled ? 0.5 : 1,
+                    background: aiProvider === opt.id ? 'linear-gradient(135deg,#4ade80,#16a34a)' : 'rgba(255,255,255,.07)',
+                    color: aiProvider === opt.id ? '#fff' : opt.disabled ? 'rgba(255,228,200,.3)' : 'rgba(255,238,218,.65)',
+                    border: aiProvider === opt.id ? '0.5px solid rgba(74,222,128,.4)' : '0.5px solid rgba(255,255,255,.1)',
+                    opacity: opt.disabled ? 0.45 : 1,
                     transition:'all 160ms',
                   }}>{opt.label}</button>
                 ))}
               </div>
               {ollamaStatus.online && ollamaStatus.models.length > 0 && (
-                <select value={ollamaModel} onChange={e => { setOllamaModel(e.target.value); setOllamaModelState(e.target.value); }} style={{ marginTop:8, width:'100%', padding:'5px 8px', borderRadius:7, fontSize:11, background:'rgba(255,252,244,.9)', border:'0.5px solid rgba(26,20,16,.12)', color:'var(--ink-1)', cursor:'pointer' }}>
+                <select value={ollamaModel} onChange={e => { setOllamaModel(e.target.value); setOllamaModelState(e.target.value); }} style={{ marginTop:8, width:'100%', padding:'5px 8px', borderRadius:7, fontSize:11, background:'rgba(255,255,255,.08)', border:'0.5px solid rgba(255,255,255,.14)', color:'rgba(255,248,240,.88)', cursor:'pointer' }}>
                   {ollamaStatus.models.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               )}
@@ -1224,7 +1378,7 @@ export const AiChat = () => {
           <PaperButton small onClick={() => { actions.clearChat(); actions.addNotification({ text:'Conversation cleared', kind:'info' }); setLogs(prev=>[...prev, { kind:'HERMES', msg:'Conversation memory wiped — fresh start', ts: new Date().toLocaleTimeString() }]); }}>
             Clear Conversation
           </PaperButton>
-        </div>
+        </div>}
       </div>
     </div>
   );

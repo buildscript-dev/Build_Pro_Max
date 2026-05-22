@@ -26,7 +26,7 @@ const APPS = {
     search_web: 'https://www.google.com/maps/search/{q}',
     search_ios: 'comgooglemaps://?q={q}',
     search_android: 'intent://maps.google.com/?q={q}#Intent;scheme=https;package=com.google.android.apps.maps;S.browser_fallback_url=https://maps.google.com/search?q={q};end',
-    keywords: ['maps', 'google maps', 'navigate', 'directions', 'location'],
+    keywords: ['maps', 'google maps', 'directions', 'location'],
   },
   drive: {
     name: 'Google Drive',
@@ -152,11 +152,21 @@ function buildUrl(app, query) {
 // Resolve app name/keyword to registry key
 export function resolveApp(nameOrKey) {
   const key = (nameOrKey || '').toLowerCase().trim();
+  if (!key) return null;
+
+  // Direct registry key match
   if (APPS[key]) return key;
+
   for (const [k, app] of Object.entries(APPS)) {
     if (app.keywords?.some(kw => {
-      if (kw.length <= 2) return key === kw; // exact match for short keywords like "x", "ig"
-      return key === kw || key.includes(kw) || kw.includes(key);
+      // Always require exact equality OR keyword appearing as a whole word in the input
+      if (key === kw) return true;
+      // Only scan for keyword as a whole word inside a longer input (e.g. "open youtube")
+      if (key.length > kw.length + 1) {
+        const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`(?:^|\\s)${escaped}(?:$|\\s)`, 'i').test(key);
+      }
+      return false;
     })) return k;
   }
   return null;
