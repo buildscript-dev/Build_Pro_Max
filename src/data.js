@@ -80,6 +80,6 @@ export const DOCK_ITEMS = [
   { id: "tasks", label: "Tasks", icon: "tasks", accent: "orange" },
   { id: "contacts", label: "Contacts", icon: "contacts", accent: "rose" },
   { id: "files", label: "Files", icon: "files", accent: "amber" },
-  { id: "chat", label: "AI", icon: "orb", accent: "coral", isAi: true },
+  { id: "chat", label: "Hermes", icon: "orb", accent: "coral", isAi: true },
   { id: "settings", label: "Settings", icon: "settings", accent: "amber" }
 ];

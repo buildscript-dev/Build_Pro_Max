@@ -3,7 +3,7 @@ import { GlassCard, PaperButton, Icon, AiOrb, Avatar } from '../components/ui/Ic
 import { accentColor } from '../data';
 import { useAppState, useAppActions, useAppStore } from '../store/AppContext';
 import { isGmailConnected, getRecentEmails } from '../services/gmail';
-import { generateEmailDraft } from '../services/ai';
+import { generateEmailDraft, generateContactInsight } from '../services/ai';
 import { ScreenShell } from '../components/ui/ScreenShell';
 
 const TAGS = ['Team', 'Investor', 'Hiring', 'Personal', 'Network', 'Partner', 'Mentor'];
@@ -23,19 +23,31 @@ export const Contacts = () => {
   const [aiDraft, setAiDraft] = useState('');
   const [aiDraftLoading, setAiDraftLoading] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [search, setSearch] = useState('');
+  const [aiInsight, setAiInsight] = useState('');
+  const [aiInsightLoading, setAiInsightLoading] = useState(false);
 
   const c = contacts.find(c => c.id === selId);
 
   // Auto-select first contact if nothing selected or selected contact no longer exists
   useEffect(() => {
-    if (contacts.length === 0) {
-      if (selId) setSelId(null);
-      return;
-    }
-    if (!selId || !contacts.find(c => c.id === selId)) {
-      setSelId(contacts[0].id);
-    }
+    if (contacts.length === 0) { if (selId) setSelId(null); return; }
+    if (!selId || !contacts.find(c => c.id === selId)) setSelId(contacts[0].id);
   }, [contacts]);
+
+  // Auto-generate AI insight when a contact is selected
+  useEffect(() => {
+    if (!c) return;
+    let cancelled = false;
+    const load = async () => {
+      setAiInsightLoading(true);
+      setAiInsight('');
+      const result = await generateContactInsight(c, store.getSnapshot());
+      if (!cancelled) { setAiInsight(result); setAiInsightLoading(false); }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [selId]);
 
   const syncFromGmail = useCallback(async () => {
     if (!isGmailConnected()) {
@@ -100,7 +112,9 @@ export const Contacts = () => {
     const now = new Date();
     const h = now.getHours() + 1;
     actions.addEvent({ title: `1:1 · ${c.name}`, day: now.getDate(), time: `${h.toString().padStart(2, '0')}:00`, color: c.color });
-    actions.addNotification({ text: `Event scheduled with ${c.name}`, kind: 'info' });
+    // Bump warmth on scheduling
+    actions.updateContact({ ...c, warmth: Math.min(1, (c.warmth || 0.5) + 0.1), last: 'Just now' });
+    actions.addNotification({ text: `Event scheduled with ${c.name} — warmth +10%`, kind: 'info' });
   };
 
   const draftMessage = async () => {
@@ -109,6 +123,8 @@ export const Contacts = () => {
     const draft = await generateEmailDraft(c, store.getSnapshot());
     setAiDraft(draft);
     setAiDraftLoading(false);
+    // Bump warmth on email draft
+    actions.updateContact({ ...c, warmth: Math.min(1, (c.warmth || 0.5) + 0.05) });
     actions.addNotification({ text: `AI drafted email for ${c.name}`, kind: 'info' });
   };
 
@@ -134,18 +150,24 @@ export const Contacts = () => {
     setAiDraftLoading(false);
   };
 
+  const filtered = search.trim()
+    ? contacts.filter(ct => ct.name?.toLowerCase().includes(search.toLowerCase()) || ct.role?.toLowerCase().includes(search.toLowerCase()) || ct.tag?.toLowerCase().includes(search.toLowerCase()))
+    : contacts;
+  const coldContacts = contacts.filter(ct => (ct.warmth || 0.5) < 0.35);
+
   return (
     <ScreenShell
-      eyebrow="AI Contacts"
+      eyebrow="Hermes Contacts"
       title={<>People who <span className="t-display-italic" style={{ color: "var(--accent-orange)" }}>matter</span>.</>}
-      subtitle={<>Warmth, last touch, and what AI noticed. It's a relationship system, not an address book.</>}
+      subtitle={<>Warmth tracked automatically. Hermes generates relationship insights and drafts outreach for you.</>}
       right={<>
-        {isGmailConnected() && <PaperButton icon="sync" small onClick={syncFromGmail} disabled={syncing}>{syncing ? (
-          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ width: 12, height: 12, borderRadius: "50%", border: "1.5px solid currentColor", borderTopColor: "transparent", animation: "orb-pulse 1s linear infinite" }} />
-            Syncing…
-          </span>
-        ) : 'Sync Gmail'}</PaperButton>}
+        <input
+          placeholder="Search contacts…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ padding: '6px 14px', borderRadius: 999, fontSize: 12, border: '0.5px solid rgba(26,20,16,.10)', background: 'rgba(255,252,244,.8)', color: 'var(--ink-1)', outline: 'none', width: 160 }}
+        />
+        {isGmailConnected() && <PaperButton icon="sync" small onClick={syncFromGmail} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync Gmail'}</PaperButton>}
         <PaperButton icon="plus" primary onClick={() => setShowAdd(true)}>Add person</PaperButton>
       </>}
     >
@@ -178,24 +200,36 @@ export const Contacts = () => {
         </GlassCard>
       )}
 
+      {coldContacts.length > 0 && (
+        <div style={{ marginBottom: 14, padding: '10px 16px', borderRadius: 12, background: 'rgba(231,64,46,.06)', border: '0.5px solid rgba(231,64,46,.2)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 14 }}>❤️‍🩹</span>
+          <div style={{ flex: 1, fontSize: 12.5, color: 'var(--ink-2)' }}>
+            <strong style={{ color: 'var(--accent-coral)' }}>{coldContacts.length} cold contact{coldContacts.length > 1 ? 's' : ''}</strong> — {coldContacts.slice(0,3).map(ct => ct.name?.split(' ')[0]).join(', ')} need{coldContacts.length === 1 ? 's' : ''} a check-in.
+          </div>
+          <PaperButton small onClick={() => { setSelId(coldContacts[0].id); setSearch(''); }}>Reach out</PaperButton>
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 480px", gap: 16, alignItems: "start" }}>
         <GlassCard padding={0} style={{ overflow: "hidden" }}>
           <div style={{ padding: "14px 22px", borderBottom: "0.5px solid var(--ink-line)", display: "grid", gridTemplateColumns: "44px 1fr 100px 80px 110px auto", gap: 12, alignItems: "center" }}>
             <span/><span className="t-cap">Person</span><span className="t-cap">Tag</span><span className="t-cap">Warmth</span><span className="t-cap">Last touch</span><span/>
           </div>
-          {contacts.map((contact) => (
+          {filtered.map((contact) => (
             <div key={contact.id} onClick={() => { setSelId(contact.id); setConfirmDeleteId(null); }} style={{
               padding: "12px 22px", display: "grid", gridTemplateColumns: "44px 1fr 100px 80px 110px auto",
               gap: 12, alignItems: "center",
-              borderBottom: contact.id !== contacts[contacts.length - 1].id ? "0.5px solid var(--ink-line)" : "none",
-              background: selId === contact.id ? "rgba(245,165,36,.10)" : "transparent",
+              borderBottom: contact.id !== filtered[filtered.length - 1].id ? "0.5px solid var(--ink-line)" : "none",
+              background: selId === contact.id ? "rgba(245,165,36,.10)" : (contact.warmth||0.5) < 0.35 ? 'rgba(231,64,46,.03)' : "transparent",
               boxShadow: selId === contact.id ? "inset 3px 0 0 var(--accent-orange)" : "none",
               cursor: "pointer",
               transition: "background 120ms",
             }}>
               <Avatar initials={contact.avatar || contact.name?.[0] || '?'} color={contact.color} size={36} />
               <div>
-                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{contact.name}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {contact.name}
+                  {(contact.warmth||0.5) < 0.35 && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 10, background: 'rgba(231,64,46,.12)', color: 'var(--accent-coral)', fontWeight: 700 }}>COLD</span>}
+                </div>
                 <div style={{ fontSize: 11, color: "var(--ink-3)" }}>{contact.role}</div>
               </div>
               <span style={{
@@ -283,18 +317,20 @@ export const Contacts = () => {
                   }
                 </div>
               </GlassCard>
-              {c.ai && (
-                <GlassCard>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <AiOrb size={20} />
-                    <div className="t-cap" style={{ color: "var(--accent-orange)" }}>AI noticed</div>
-                  </div>
-                  <div style={{ fontSize: 14, color: "var(--ink-1)", marginTop: 10, lineHeight: 1.5 }}>{c.ai}</div>
-                  <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                    <PaperButton small onClick={schedule}>Schedule 1:1</PaperButton>
-                  </div>
-                </GlassCard>
-              )}
+              <GlassCard>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <AiOrb size={20} />
+                  <div className="t-cap" style={{ color: "var(--accent-orange)" }}>Hermes relationship insight</div>
+                  {aiInsightLoading && <div style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid var(--accent-orange)', borderTopColor: 'transparent', animation: 'orb-pulse 1s linear infinite', marginLeft: 4 }}/>}
+                </div>
+                <div style={{ fontSize: 13.5, color: 'var(--ink-1)', lineHeight: 1.6, fontStyle: 'italic', minHeight: 40 }}>
+                  {aiInsightLoading ? 'Generating relationship analysis…' : `"${aiInsight || c.ai || 'No insight yet — interact with this contact to build context.'}"`}
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                  <PaperButton small onClick={schedule}>📅 Schedule 1:1</PaperButton>
+                  <PaperButton small primary onClick={draftMessage} disabled={aiDraftLoading}>{aiDraftLoading ? 'Drafting…' : '✉️ Draft email'}</PaperButton>
+                </div>
+              </GlassCard>
             </>
           ))}
         </div>

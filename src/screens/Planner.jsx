@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb } from '../components/ui/Icons';
 import { accentColor } from '../data';
-import { useAppActions, useAppStore } from '../store/AppContext';
+import { useAppActions, useAppStore, useAppState } from '../store/AppContext';
 import { generateAiResponse } from '../services/ai';
 import { formatDate, getCurrentTime } from '../services/clock';
 import { ScreenGuide } from '../components/ui/ScreenGuide';
@@ -30,6 +30,7 @@ const defaultTracks = () => {
 export const Planner = () => {
   const { actions } = useAppActions();
   const store = useAppStore();
+  const state = useAppState();
   const [scope, setScope] = useState("week");
   const [data, setData] = useState(defaultTracks);
 
@@ -45,29 +46,16 @@ export const Planner = () => {
   const regenerate = useCallback(async () => {
     actions.addNotification({ text: 'AI regenerating tracks…', kind: 'info' });
     const snapshot = store.getSnapshot();
-    const prompt = `I have ${snapshot.tasks?.length || 0} tasks and ${snapshot.notes?.length || 0} notes. My current week tracks are: ${tracks.map(t => t.name).join(', ')}. Suggest an optimized weekly plan prioritizing my ${snapshot.tasks?.filter(t => t.priority === 'P0' && t.status !== 'done').length || 0} P0 tasks. Return a brief suggestion.`;
+    const p0Tasks = snapshot.tasks?.filter(t => t.priority === 'P0' && t.status !== 'done') || [];
+    
+    const prompt = `I have ${p0Tasks.length} P0 tasks. Suggest an optimized weekly plan prioritizing my P0 tasks: ${p0Tasks.map(t=>t.title).join(', ')}. Return a brief suggestion and output action tokens like [action: addEvent, {"title": "Focus: Task Name"}] or [action: notify, {"text": "Updated schedule"}] to automatically place these on my calendar.`;
+    
     const response = await generateAiResponse(prompt, snapshot);
-    const daysArr = (() => {
-      const now = new Date();
-      const dayOfWeek = (now.getDay() + 6) % 7;
-      const mon = now.getDate() - dayOfWeek;
-      return Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(now.getFullYear(), now.getMonth(), mon + i);
-        const isToday = i === dayOfWeek;
-        return formatDate(d) + (isToday ? ' · Today' : '');
-      });
-    })();
-    const shifting = [...tracks].sort(() => Math.random() - 0.5);
-    const regenerated = shifting.map((t, ti) => ({
-      ...t,
-      blocks: t.blocks.map(b => ({
-        ...b,
-        d: Math.min(6, Math.max(0, b.d + (ti === 0 ? 1 : 0))),
-      })),
-    }));
-    setData({ tracks: regenerated, days: daysArr });
-    if (response) actions.addNotification({ text: `AI: ${response.slice(0, 120)}…`, kind: 'info' });
-  }, [store, tracks, actions]);
+    if (response) {
+      actions.addNotification({ text: `AI: ${response.replace(/\[action:[^\]]+\]/g, '').slice(0, 100)}…`, kind: 'info' });
+      actions.executeAiActions(response);
+    }
+  }, [store, actions]);
 
   const showMe = () => {
     actions.addNotification({ text: 'Showing competing blocks: Product polish vs All-hands prep on Friday', kind: 'info' });

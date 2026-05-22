@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { GlassCard, PaperButton, Avatar, Icon, AiOrb } from '../components/ui/Icons';
 import { EnvironmentBadge } from '../components/ui/EnvironmentBadge';
 import { accentColor } from '../data';
-import { useApp } from '../store/AppContext';
+import { useApp, useAppStore } from '../store/AppContext';
 import { formatTime, formatDate, sendNotification, getGreeting } from '../services/clock';
+import { generateDailyBriefing, parseNaturalLanguageTask } from '../services/ai';
 
 // Card definitions are static — move outside the component to avoid re-creation on every render
 const CARDS = [
@@ -26,12 +27,18 @@ function formatTimer(sec) {
 
 export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
   const { state, actions } = useApp();
+  const store = useAppStore();
   const [expandedId, setExpandedId] = useState(null);
   const containerRef = useRef(null);
   const [focusActive, setFocusActive] = useState(false);
   const [focusRemaining, setFocusRemaining] = useState(0);
   const [hour, setHour] = useState(() => new Date().getHours());
   const [liveTime, setLiveTime] = useState(() => formatTime(new Date()));
+  const [aiHeadline, setAiHeadline] = useState('');
+  const [aiHeadlineLoading, setAiHeadlineLoading] = useState(true);
+  const [captureInput, setCaptureInput] = useState('');
+  const [showCapture, setShowCapture] = useState(false);
+  const captureRef = useRef(null);
 
   const D = state;
   const t = tweaksProp || state.tweaks;
@@ -92,10 +99,38 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
     actions.addNotification({ text: 'Focus reset', kind: 'info' });
   };
 
-  const handleCapture = () => {
-    actions.addNote({ title: 'Quick capture', tag: 'Inbox', preview: '', content: '' });
-    actions.addNotification({ text: 'Quick note captured', kind: 'info' });
-  };
+  const handleCapture = useCallback(async () => {
+    const text = captureInput.trim();
+    if (!text) {
+      // Open inline capture
+      setShowCapture(true);
+      setTimeout(() => captureRef.current?.focus(), 50);
+      return;
+    }
+    // Smart routing: parse intent
+    const lower = text.toLowerCase();
+    if (/^(note|write|capture|remember|journal)[:;\s]/i.test(text)) {
+      const title = text.replace(/^(note|write|capture|remember|journal)[:;\s]+/i, '').trim() || 'Quick note';
+      actions.addNote({ title, tag: 'Inbox', content: text, preview: title });
+      actions.addNotification({ text: `Note captured: "${title}"`, kind: 'info' });
+    } else if (/^(event|meeting|schedule|cal)[:;\s]/i.test(text)) {
+      const now = new Date();
+      actions.addEvent({ title: text.replace(/^(event|meeting|schedule|cal)[:;\s]+/i, '').trim(), day: now.getDate(), month: now.getMonth(), year: now.getFullYear(), time: '09:00', color: 'amber' });
+      actions.addNotification({ text: `Event added`, kind: 'info' });
+    } else {
+      // Default: route to AI task parser
+      try {
+        const parsed = await parseNaturalLanguageTask(text, store.getSnapshot());
+        actions.addTask({ ...parsed, status: 'todo' });
+        actions.addNotification({ text: `Task captured: "${parsed.title}" · ${parsed.priority}`, kind: 'info' });
+      } catch {
+        actions.addNote({ title: text.slice(0, 60), tag: 'Inbox', content: text, preview: text.slice(0, 80) });
+        actions.addNotification({ text: 'Captured to inbox', kind: 'info' });
+      }
+    }
+    setCaptureInput('');
+    setShowCapture(false);
+  }, [captureInput, actions, store]);
 
   const cardScreenMap = {
     hello: 'notes',
@@ -118,6 +153,18 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
   };
 
   const closeExpanded = useCallback(() => setExpandedId(null), []);
+
+  // Live AI briefing on mount
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setAiHeadlineLoading(true);
+      const result = await generateDailyBriefing(store.getSnapshot());
+      if (!cancelled) { setAiHeadline(result); setAiHeadlineLoading(false); }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
   // Greeting derived from live hour state
   const greeting = useMemo(() => getGreeting(hour), [hour]);
@@ -150,13 +197,16 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
             {greeting}, <span className="t-display-italic" style={{ color: "var(--accent-orange)" }}>{D.user?.name?.split(' ')[0] || "User"}</span>.
             {focusActive && <span style={{ fontSize: 'clamp(13px, 1.8vw, 18px)', marginLeft: 'clamp(8px, 1.6vw, 16px)', color: "var(--accent-coral)" }}>Focus · {formatTimer(focusRemaining)}</span>}
           </h1>
-          <div style={{ marginTop: 8, fontSize: 'clamp(12px, 1.4vw, 14px)', color: "var(--ink-2)", maxWidth: 640 }}>
-            <span className="ai-text" style={{ fontWeight: 500 }}>AI today: </span>
-            {D.aiSuggestions?.[0]?.text || `Today's big rock is the ${D.today.bigRock?.toLowerCase() || 'main task'} — everything else can wait.`}
+          <div style={{ marginTop: 8, fontSize: 'clamp(12px, 1.4vw, 14px)', color: "var(--ink-2)", maxWidth: 640, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+            <span className="ai-text" style={{ fontWeight: 500, flexShrink: 0 }}>Hermes: </span>
+            {aiHeadlineLoading
+              ? <span style={{ color: 'var(--ink-3)' }}>Generating your briefing…</span>
+              : <span>{aiHeadline || (D.aiSuggestions?.[0]?.text || `Today's big rock: ${D.tasks?.find(t => t.priority === 'P0' && t.status !== 'done')?.title || D.today.bigRock || 'set a P0 task to get started'}.`)}</span>
+            }
           </div>
         </div>
 
-        <div className="resp-scroll-x" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div className="resp-scroll-x" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: 'wrap' }}>
           <div className="t-mono" style={{ fontSize: 'clamp(11px, 1.3vw, 13px)', color: "var(--ink-3)", padding: "0 6px" }}>
             {liveTime}
           </div>
@@ -172,7 +222,22 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
               Start 25-min focus
             </PaperButton>
           )}
-          <PaperButton icon="plus" primary small onClick={handleCapture}>Capture</PaperButton>
+          {showCapture ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 4px' }}>
+              <input
+                ref={captureRef}
+                placeholder='Task, note, or event… (note: X, event: X, or just type)'
+                value={captureInput}
+                onChange={e => setCaptureInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleCapture(); if (e.key === 'Escape') { setShowCapture(false); setCaptureInput(''); } }}
+                style={{ all: 'unset', fontSize: 12, color: 'var(--ink-1)', fontFamily: 'var(--font-body)', padding: '6px 10px', borderRadius: 8, background: 'rgba(255,252,244,.9)', border: '0.5px solid rgba(26,20,16,.12)', width: 260 }}
+              />
+              <PaperButton icon="plus" primary small onClick={handleCapture} disabled={!captureInput.trim()}>Save</PaperButton>
+              <button type="button" onClick={() => { setShowCapture(false); setCaptureInput(''); }} style={{ fontSize: 12, color: 'var(--ink-3)', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+            </div>
+          ) : (
+            <PaperButton icon="plus" primary small onClick={() => { setShowCapture(true); setTimeout(() => captureRef.current?.focus(), 50); }}>✨ Capture</PaperButton>
+          )}
         </div>
       </div>
 

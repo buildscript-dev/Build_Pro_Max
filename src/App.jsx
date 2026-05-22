@@ -65,7 +65,7 @@ export default function App() {
   const user = useAppState((s) => s.user);
   const today = useAppState((s) => s.today);
   const notifications = useAppState((s) => s.notifications);
-  const [showAuth, setShowAuth] = useState(!authUser);
+  const [showAuth, setShowAuth] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [screen, setScreen] = useState('dashboard');
   const [cmdkOpen, setCmdkOpen] = useState(false);
@@ -78,9 +78,7 @@ export default function App() {
     return () => { delete window.__opencode; };
   }, [actions]);
 
-  useEffect(() => {
-    if (authUser) setShowAuth(false);
-  }, [authUser]);
+  // Auth effect removed to disable auth UI
 
   useEffect(() => {
     if (authUser && user) {
@@ -270,9 +268,11 @@ export default function App() {
       )}
 
       {showOnboarding && authUser && (
-        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--ink-3)', background: 'var(--paper-0)' }}>Loading onboarding…</div>}>
-          <Onboarding onComplete={handleOnboardingComplete} />
-        </Suspense>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(246,241,229,0.55)', backdropFilter: 'blur(6px)' }}>
+          <Suspense fallback={<div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--ink-3)', background: 'var(--paper-0)' }}>Loading onboarding…</div>}>
+            <Onboarding onComplete={handleOnboardingComplete} />
+          </Suspense>
+        </div>
       )}
 
       {t.focusMode !== 'execution' && (

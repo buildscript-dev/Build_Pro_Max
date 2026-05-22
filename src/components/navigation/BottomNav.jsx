@@ -7,7 +7,7 @@ const MOBILE_NAV_ITEMS = [
   { id: 'planner', icon: 'planner', label: 'Plan', accent: 'orange' },
   { id: 'notes', icon: 'notes', label: 'Notes', accent: 'amber' },
   { id: 'tasks', icon: 'tasks', label: 'Tasks', accent: 'orange' },
-  { id: 'chat', icon: 'orb', label: 'AI', accent: 'coral', isAi: true },
+  { id: 'chat', icon: 'orb', label: 'Hermes', accent: 'coral', isAi: true },
 ];
 
 export const BottomNav = ({ active, onSelect, onOpenCmdK, hasNotifications = false }) => {

@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { GlassCard, PaperButton, Icon, AiOrb } from '../components/ui/Icons';
 import { accentColor } from '../data';
-import { useAppState, useAppActions } from '../store/AppContext';
+import { useAppState, useAppActions, useAppStore } from '../store/AppContext';
 import { ScreenShell } from '../components/ui/ScreenShell';
+import { generateDailyBriefing, generateAiResponse } from '../services/ai';
 
 const COLORS = ['amber', 'orange', 'coral', 'rose'];
 const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -33,6 +34,7 @@ function createDatedEvent(base, date) {
 export const Calendar = () => {
   const { actions } = useAppActions();
   const events = useAppState((s) => s.events) || [];
+  const store = useAppStore();
   const now = new Date();
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
@@ -41,6 +43,41 @@ export const Calendar = () => {
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [briefing, setBriefing] = useState('');
+  const [briefingLoading, setBriefingLoading] = useState(true);
+  const [nlMode, setNlMode] = useState(false);
+  const [nlInput, setNlInput] = useState('');
+  const [nlParsing, setNlParsing] = useState(false);
+  const tasks = useAppState(s => s.tasks) || [];
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setBriefingLoading(true);
+      const result = await generateDailyBriefing(store.getSnapshot());
+      if (!cancelled) { setBriefing(result); setBriefingLoading(false); }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleNlEvent = useCallback(async () => {
+    if (!nlInput.trim() || nlParsing) return;
+    setNlParsing(true);
+    try {
+      const snap = store.getSnapshot();
+      const today = now.getDate();
+      const prompt = `Parse this calendar event: "${nlInput}". Today is day ${today} of month ${now.getMonth()+1}. Return ONLY JSON: {"title":"...","day":${today},"time":"HH:MM","color":"amber|orange|coral|rose"}. day must be a number 1-31.`;
+      const response = await generateAiResponse(prompt, snap);
+      const obj = JSON.parse(response?.match(/\{[\s\S]*\}/)?.[0] || '{}');
+      if (obj.title) {
+        actions.addEvent({ ...obj, month: currentMonth, year: currentYear, day: Number(obj.day) || today });
+        actions.addNotification({ text: `Event added: "${obj.title}"`, kind: 'info' });
+        setNlInput(''); setNlMode(false);
+      }
+    } catch { actions.addNotification({ text: 'Could not parse event — try manual add', kind: 'warning' }); }
+    setNlParsing(false);
+  }, [nlInput, nlParsing, store, actions, currentMonth, currentYear, now]);
 
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const firstDayOfWeek = new Date(currentYear, currentMonth, 1).getDay();
@@ -127,14 +164,33 @@ export const Calendar = () => {
 
   return (
     <ScreenShell
-      eyebrow="AI Calendar"
+      eyebrow="Hermes Calendar"
       title={<>{monthName} <span className="t-display-italic" style={{ color: "var(--accent-orange)" }}>{currentYear}</span>.</>}
-      subtitle={<>Events from Google + iCloud + Linear, planned around your execution tracks. AI fills the gaps.</>}
+      subtitle={<>AI-powered scheduling. Conflicts detected automatically. Ask Hermes to plan your week.</>}
       right={<>
+        <PaperButton small onClick={() => setNlMode(v => !v)}>✨ Quick add</PaperButton>
         <PaperButton icon="sparkle" small onClick={autoFill}>Auto-fill week</PaperButton>
         <PaperButton icon="plus" primary onClick={() => setShowAdd(true)}>New event</PaperButton>
       </>}
     >
+      {nlMode && (
+        <div style={{ marginBottom: 16, padding: '16px 20px', borderRadius: 16, background: 'rgba(245,165,36,.08)', border: '1px solid rgba(245,165,36,.25)', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <span style={{ fontSize: 18 }}>📅</span>
+          <input
+            autoFocus
+            placeholder='Type naturally: "Lunch with Alex Thursday 1pm" or "Review meeting Friday 3pm"'
+            value={nlInput}
+            onChange={e => setNlInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleNlEvent(); if (e.key === 'Escape') setNlMode(false); }}
+            style={{ all: 'unset', flex: 1, fontSize: 14, color: 'var(--ink-1)', fontFamily: 'var(--font-body)' }}
+          />
+          {nlParsing
+            ? <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid var(--accent-orange)', borderTopColor: 'transparent', animation: 'orb-pulse 1s linear infinite' }}/>
+            : <PaperButton small primary onClick={handleNlEvent} disabled={!nlInput.trim()}>Add</PaperButton>
+          }
+          <button type="button" onClick={() => setNlMode(false)} style={{ fontSize: 12, color: 'var(--ink-3)', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+        </div>
+      )}
       {showAdd && (
         <GlassCard style={{ marginBottom: 16, padding: 0 }}>
           <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -245,26 +301,40 @@ export const Calendar = () => {
         </GlassCard>
 
         <GlassCard>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
             <AiOrb size={20} />
-            <div className="t-cap" style={{ color: "var(--accent-orange)" }}>AI · calendar shaping</div>
+            <div className="t-cap" style={{ color: "var(--accent-orange)" }}>Hermes · daily briefing</div>
+            {briefingLoading && <div style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid var(--accent-orange)', borderTopColor: 'transparent', animation: 'orb-pulse 1s linear infinite', marginLeft: 4 }}/>}
           </div>
-          <div className="t-display-italic" style={{ fontSize: 22, marginTop: 10, lineHeight: 1.35, color: "var(--ink-1)" }}>
-            "Friday is overloaded. Sat is empty. I can rebalance — keep one focus block on Sat AM?"
+          <div className="t-display-italic" style={{ fontSize: 18, lineHeight: 1.5, color: "var(--ink-1)", minHeight: 52 }}>
+            {briefingLoading ? 'Hermes is preparing your daily briefing…' : `"${briefing}"`}
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-            <PaperButton small onClick={() => actions.addNotification({ text: 'Kept Saturday free', kind: 'info' })}>Keep Sat free</PaperButton>
-            <PaperButton small primary onClick={autoFill}>Rebalance</PaperButton>
+            <PaperButton small onClick={autoFill}>Rebalance week</PaperButton>
+            <PaperButton small primary onClick={() => window.__opencode?.onNavigate?.('tasks')}>🎯 Open tasks</PaperButton>
+            <PaperButton small onClick={() => {
+              const p0 = tasks.filter(t => t.priority === 'P0' && t.status !== 'done');
+              if (p0.length) {
+                const today = now.getDate();
+                actions.addEvent({ title: `P0: ${p0[0].title}`, day: today, month: now.getMonth(), year: now.getFullYear(), time: '09:00', color: 'coral' });
+                actions.addNotification({ text: `P0 task scheduled as event`, kind: 'info' });
+              } else { actions.addNotification({ text: 'No P0 tasks to schedule', kind: 'info' }); }
+            }}>⚡ Schedule P0</PaperButton>
           </div>
-          <div className="hair" style={{ margin: "16px 0" }}/>
-          <div style={{ fontSize: 12, color: "var(--ink-3)", lineHeight: 1.5 }}>
-            Patterns noticed this month:
-            <ul style={{ margin: "8px 0 0 0", paddingLeft: 16 }}>
-              <li>You schedule deep-work in 90-min blocks; only 2 of 8 completed this week.</li>
-              <li>Investor mtgs cluster around Thu — historically your worst-sleep night.</li>
-              <li>Off days correlate with 3-day productive streaks. The trade is real.</li>
-            </ul>
-          </div>
+          {weekEvents.length > 0 && (() => {
+            const timeMap = {};
+            weekEvents.forEach(e => { const key = `${e._date?.toDateString()}-${e.time}`; timeMap[key] = (timeMap[key] || 0) + 1; });
+            const conflicts = Object.entries(timeMap).filter(([,v]) => v > 1);
+            return conflicts.length > 0 ? (
+              <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: 10, background: 'rgba(231,64,46,.08)', border: '0.5px solid rgba(231,64,46,.2)', fontSize: 12, color: 'var(--accent-coral)' }}>
+                ⚠️ {conflicts.length} scheduling conflict(s) detected this week
+              </div>
+            ) : (
+              <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: 10, background: 'rgba(74,222,128,.06)', border: '0.5px solid rgba(74,222,128,.2)', fontSize: 12, color: '#16a34a' }}>
+                ✓ No scheduling conflicts this week
+              </div>
+            );
+          })()}
         </GlassCard>
       </div>
     </ScreenShell>

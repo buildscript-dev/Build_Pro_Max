@@ -5,3 +5,18 @@ dist/
 
 *.log
 .DS_Store
+
+# Environment — never commit real keys
+.env
+.env.local
+.env.*.local
+
+# Hermes CLI session token
+.hermes_session.json
+
+# Local Claude Code settings
+.claude/
+
+# Editor
+.idea/
+.vscode/settings.json

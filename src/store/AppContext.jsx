@@ -42,7 +42,7 @@ const initialToday = () => {
 };
 
 function freshState() {
-  const seed = (arr) => (arr || []).map(item => ({ ...item }));
+  const seed = (arr) => (arr || []).map((item, i) => ({ id: item.id ?? `seed_${i}`, ...item }));
   return {
     user: { ...initialData.user },
     today: initialToday(),
@@ -57,7 +57,7 @@ function freshState() {
     goals: seed(initialData.goals),
     schedule: seed(initialData.schedule),
     chatMessages: [
-      { id: 'm1', role: 'ai', text: 'Welcome. I am your environment engine. How can I help you today?', time: Date.now() },
+      { id: 'm1', role: 'ai', text: 'Welcome. I am Hermes — your executive AI. I can help with your tasks, notes, inbox, habits, build tracker, and more. What do you want to tackle today?', time: Date.now() },
     ],
     notifications: [],
     tweaks: {
@@ -665,6 +665,67 @@ export function AppProvider({ children, authUser: initialAuthUser = null, setAut
     addAutomationFeedback: (feedback) => dispatch({ type: 'ADD_AUTOMATION_FEEDBACK', payload: feedback }),
     setAutoReply: (message) => dispatch({ type: 'SET_AUTO_REPLY', payload: message }),
     decayWarmth: () => dispatch({ type: 'DECAY_WARMTH' }),
+
+    // ─── AI Action Token Executor ─────────────────────────────────────
+    // Parses [action: TYPE, {...}] tokens from LLM responses and executes them.
+    // Example: [action: addTask, {"title": "Ship auth", "priority": "P0", "due": "Today"}]
+    executeAiActions: (responseText) => {
+      if (!responseText) return 0;
+      const pattern = /\[action:\s*(\w+),\s*(\{[^}]*\}|\[[^\]]*\]|"[^"]*"|[^\]]+)\]/g;
+      let match;
+      let count = 0;
+      while ((match = pattern.exec(responseText)) !== null) {
+        const actionName = match[1];
+        let payload = {};
+        try { payload = JSON.parse(match[2]); } catch { payload = { value: match[2].trim() }; }
+        const now = new Date();
+        try {
+          switch (actionName) {
+            case 'addTask':
+              dispatch({ type: 'ADD_TASK', payload: { title: 'AI Task', priority: 'P2', due: 'Today', status: 'todo', project: 'General', ...payload } });
+              if (authUser) syncToSupabase('tasks', payload);
+              count++;
+              break;
+            case 'addNote':
+              dispatch({ type: 'ADD_NOTE', payload: { title: 'AI Note', tag: 'Inbox', content: '', preview: '', ...payload } });
+              if (authUser) syncToSupabase('notes', payload);
+              count++;
+              break;
+            case 'addEvent':
+              dispatch({ type: 'ADD_EVENT', payload: { title: 'AI Event', day: now.getDate(), month: now.getMonth(), year: now.getFullYear(), time: '09:00', color: 'amber', ...payload } });
+              if (authUser) syncToSupabase('events', payload);
+              count++;
+              break;
+            case 'addReminder':
+              dispatch({ type: 'ADD_REMINDER', payload: { text: 'AI Reminder', time: '09:00', ...payload } });
+              if (authUser) syncToSupabase('reminders', payload);
+              count++;
+              break;
+            case 'addContact':
+              dispatch({ type: 'ADD_CONTACT', payload: { name: 'New Contact', tag: 'Network', warmth: 0.5, ...payload } });
+              if (authUser) syncToSupabase('contacts', payload);
+              count++;
+              break;
+            case 'setTweak':
+              if (payload.key) dispatch({ type: 'SET_TWEAK', payload: { [payload.key]: payload.value } });
+              count++;
+              break;
+            case 'notify':
+              dispatch({ type: 'ADD_NOTIFICATION', payload: { text: payload.text || payload.value || 'Hermes notification', kind: payload.kind || 'info' } });
+              count++;
+              break;
+            default:
+              break;
+          }
+        } catch (e) {
+          // silently skip malformed action tokens
+        }
+      }
+      if (count > 0) {
+        dispatch({ type: 'ADD_NOTIFICATION', payload: { text: `Hermes executed ${count} action${count > 1 ? 's' : ''}`, kind: 'info' } });
+      }
+      return count;
+    },
   }), [dispatch, authUser, store]);
 
   // Stable across renders unless one of its members actually changes.

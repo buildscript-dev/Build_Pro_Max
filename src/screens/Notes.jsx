@@ -7,6 +7,7 @@ import {
   extractEnvironmentState, extractEventsAndReminders, extractLearningItems,
   generateLearningNote, createAutomationSummary, compileLearningIntoBook, formatBookAsNote
 } from '../services/environment';
+import { generateTitle, generateTag, generateIcon, generateSummary, extractTasksFromNote, generateNoteEnhancement } from '../services/ai';
 import { NoteEditor } from '../components/editor/NoteEditor';
 import { EnvironmentBadge } from '../components/ui/EnvironmentBadge';
 import { NoteCanvas } from '../components/editor/NoteCanvas';
@@ -160,21 +161,9 @@ export const Notes = () => {
     laserPointsRef.current.push({ x, y, t: Date.now() });
   }, [laserMode]);
 
-  // ── AI analysis (local, rule-based) ─────────────────────────────────────────
-  const runAiAnalysis = (content, noteId) => {
+  // ── AI analysis (local + OpenRouter) ─────────────────────────────────────────
+  const runAiAnalysis = async (content, noteId) => {
     if (!content || !content.trim()) return;
-
-    let tag = 'General';
-    let icon = 'notes';
-    const text = content.toLowerCase();
-
-    if (/gym|workout|exercise|run|training|fitness|muscle/i.test(text)) { tag = 'Gym'; icon = 'flame'; }
-    else if (/bessemer|pitch|investor|vc|fundraise|funding|round|deck/i.test(text)) { tag = 'Fundraise'; icon = 'orb'; }
-    else if (/hiring|recruit|interview|resume|candidate|hire/i.test(text)) { tag = 'Hiring'; icon = 'contacts'; }
-    else if (/study|learn|book|reading|read|course|exam|tutorial|practice/i.test(text)) { tag = 'Learning'; icon = 'sparkle'; }
-    else if (/code|engineering|debug|dev|architect|software|github|function|component|api|error|bug/i.test(text)) { tag = 'Engineering'; icon = 'cmd'; }
-    else if (/meeting|sync|call|calendar|schedule|discussion/i.test(text)) { tag = 'Network'; icon = 'calendar'; }
-    else if (/design|figma|ui|ux|prototype|wireframe/i.test(text)) { tag = 'Design'; icon = 'fig'; }
 
     let currentNote = notesRef.current.find(n => n.id === noteId);
     let title = currentNote?.title || 'Untitled';
@@ -187,13 +176,35 @@ export const Notes = () => {
         const words = cleanContent.split(/\s+/).slice(0, 4).join(' ');
         title = words.length > 3 ? words + '…' : 'Brainstorm Note';
       }
+      // AI Title generation
+      try { title = await generateTitle(content) || title; } catch {}
     }
+
+    let tag = currentNote?.tag || 'General';
+    let icon = currentNote?.icon || 'notes';
+    try {
+      tag = await generateTag(content, title);
+      icon = await generateIcon(tag);
+    } catch {}
 
     const envState = extractEnvironmentState(content);
     const extractedItems = extractEventsAndReminders(content);
     const learningItems = envState.isLearningSession ? extractLearningItems(content) : null;
-    const automationSummary = createAutomationSummary(envState, { ...extractedItems, ...(learningItems || {}) });
-    const aiSummary = automationSummary || "I've cataloged your thoughts under " + tag + ".";
+    
+    // Call true AI tools in background
+    let aiSummary = await generateSummary(content);
+    try {
+      const aiTasks = await extractTasksFromNote(title, content);
+      if (aiTasks?.length) {
+        extractedItems.tasks = [...extractedItems.tasks, ...aiTasks];
+      }
+      const enhancement = await generateNoteEnhancement(title, content);
+      if (enhancement) {
+        aiSummary = enhancement;
+      }
+    } catch {}
+    
+    if (!aiSummary) aiSummary = createAutomationSummary(envState, { ...extractedItems, ...(learningItems || {}) }) || "I've cataloged your thoughts under " + tag + ".";
 
     actions.updateNote({ id: noteId, title, tag, icon, ai: aiSummary, content });
 

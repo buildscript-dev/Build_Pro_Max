@@ -1,3 +1,6 @@
+import { getMemoryProfile } from './hermesMemory.js';
+import { callOllama, getOllamaModel } from './ollama.js';
+
 const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
 const FALLBACK_MODEL = 'mistralai/mistral-7b-instruct:free';
 
@@ -60,6 +63,7 @@ function buildSystemPrompt(context, extra = '') {
   if (moodDetection) behaviorRules += '\n- Pay attention to the user\'s emotional tone. If they seem stressed or overwhelmed, suggest breaks or reprioritization.';
   if (relWatcher) behaviorRules += '\n- Notice when contacts haven\'t been interacted with recently and suggest reaching out.';
   behaviorRules += '\n- Always respond in 1-2 sentences unless the user asks for detail. Be simple and humble.';
+
   const contextStr = JSON.stringify({
     tasks: (context.tasks || []).slice(0, 10),
     notes: (context.notes || []).slice(0, 5),
@@ -67,7 +71,13 @@ function buildSystemPrompt(context, extra = '') {
     events: (context.events || []).slice(0, 5),
     reminders: (context.reminders || []).slice(0, 5),
   });
-  return `You are an AI executive assistant inside Build_PRO_MAX_1, a productivity OS. The user is ${role}. ${style} You have access to their current context data. Be concise (2-4 sentences unless asked for detail). Proactively suggest actions when appropriate.${behaviorRules}
+
+  const memoryProfile = getMemoryProfile();
+  const memorySection = memoryProfile?.trim()
+    ? `\n\n## Your Long-Term Memory (Obsidian)\nThis is what you know about the user from your memory vault:\n${memoryProfile.slice(0, 2000)}`
+    : '';
+
+  return `You are Hermes, an advanced autonomous AI executive assistant running inside Build_PRO_MAX_1 — the user's personal productivity OS. The user is ${role}. ${style} You have full access to their context, notes, tasks, and personal memory vault. Be concise (2-4 sentences unless asked for detail). Proactively suggest actions when appropriate.${behaviorRules}${memorySection}
 
 You can execute actions on the user's behalf by including them in your response like this:
 - [action: addTask, {"title":"Buy groceries","priority":"P2","due":"Today"}]
@@ -79,10 +89,29 @@ You can execute actions on the user's behalf by including them in your response 
 - [action: navigate, {"screen":"tasks"}]
 - [action: notify, {"text":"Done!","kind":"info"}]
 - [action: clearChat, {}]
+- [action: updateMemory, {"content":"User prefers to work in the morning. Main project: ..."}]
 
-Use these when the user asks you to create, update, or delete something, or to navigate. Place the action at the end of your response on its own line.
+Use updateMemory when the user tells you something important about themselves, their goals, or preferences that you should remember long-term. Place actions at the end of your response on their own line.
 
 Current context:\n${contextStr}\n${extra}`.trim();
+}
+
+// Unified AI caller: Ollama (local, primary) → OpenRouter (cloud, fallback)
+async function callAI(messages, maxTokens = 400) {
+  const preferLocal = localStorage.getItem('ai_provider') !== 'openrouter';
+  if (preferLocal) {
+    const local = await callOllama(messages, maxTokens);
+    if (local) return local;
+  }
+  return callOpenRouter(messages, maxTokens);
+}
+
+export function getActiveProvider() {
+  return localStorage.getItem('ai_provider') !== 'openrouter' ? 'ollama' : 'openrouter';
+}
+
+export function setAiProvider(provider) {
+  localStorage.setItem('ai_provider', provider);
 }
 
 async function callOpenRouter(messages, maxTokens = 300) {
@@ -147,27 +176,19 @@ function heuristicSummary(content) {
 
 export async function generateTitle(content) {
   if (!content || !content.trim()) return '';
-  const apiKey = getApiKey();
-  if (apiKey) {
-    const result = await callOpenRouter([
-      { role: 'user', content: `Generate a concise title (max 8 words) for this note content. Return ONLY the title, nothing else:\n\n${content.slice(0, 1000)}` }
-    ]);
-    if (result) return result.replace(/^["']|["']$/g, '').slice(0, 80);
-  }
-  return heuristicTitle(content);
+  const result = await callAI([
+    { role: 'user', content: `Generate a concise title (max 8 words) for this note content. Return ONLY the title, nothing else:\n\n${content.slice(0, 1000)}` }
+  ]);
+  return result ? result.replace(/^["']|["']$/g, '').slice(0, 80) : heuristicTitle(content);
 }
 
 export async function generateTag(content, title) {
-  const apiKey = getApiKey();
   const text = ((title || '') + ' ' + (content || '')).slice(0, 1500);
-  if (apiKey) {
-    const tags = Object.keys(TAG_KEYWORDS).join(', ');
-    const result = await callOpenRouter([
-      { role: 'user', content: `Categorize this text into exactly one tag from this list: ${tags}. Return ONLY the tag name, nothing else:\n\n${text}` }
-    ]);
-    if (result && TAG_KEYWORDS[result]) return result;
-  }
-  return heuristicTag(content, title);
+  const tags = Object.keys(TAG_KEYWORDS).join(', ');
+  const result = await callAI([
+    { role: 'user', content: `Categorize this text into exactly one tag from this list: ${tags}. Return ONLY the tag name, nothing else:\n\n${text}` }
+  ]);
+  return (result && TAG_KEYWORDS[result]) ? result : heuristicTag(content, title);
 }
 
 export async function generateIcon(tag) {
@@ -176,56 +197,42 @@ export async function generateIcon(tag) {
 
 export async function generateSummary(content) {
   if (!content || content.trim().split(/\s+/).length < 8) return null;
-  const apiKey = getApiKey();
-  if (apiKey) {
-    const result = await callOpenRouter([
-      { role: 'user', content: `Summarize this in 1 short sentence (max 15 words):\n\n${content.slice(0, 1000)}` }
-    ]);
-    if (result) return 'Summary: ' + result;
-  }
-  return heuristicSummary(content);
+  const result = await callAI([
+    { role: 'user', content: `Summarize this in 1 short sentence (max 15 words):\n\n${content.slice(0, 1000)}` }
+  ]);
+  return result ? 'Summary: ' + result : heuristicSummary(content);
 }
 
 export async function generateAiResponse(userMessage, context, history = []) {
-  const apiKey = getApiKey();
-
   // First, query the user's actual data for a precise answer
   const dataAnswer = queryUserData(userMessage, context);
 
-  if (apiKey) {
-    const system = buildSystemPrompt(context);
-    const historyMessages = history.slice(-10).map(m => ({
-      role: m.role === 'ai' ? 'assistant' : 'user',
-      content: m.text,
-    }));
-    const messages = [
-      { role: 'system', content: system },
-      { role: 'user', content: `Here is what I found in the user's data for their question. Make it conversational and helpful:\n\nQuestion: ${userMessage}\n\nData: ${dataAnswer}` },
-    ];
-    const result = await callOpenRouter(messages, 300);
-    if (result) return result;
-  }
-
-  return dataAnswer;
+  const system = buildSystemPrompt(context);
+  const historyMessages = history.slice(-10).map(m => ({
+    role: m.role === 'ai' ? 'assistant' : 'user',
+    content: m.text,
+  }));
+  const messages = [
+    { role: 'system', content: system },
+    ...historyMessages,
+    { role: 'user', content: `Here is what I found in the user's data for their question. Make it conversational and helpful:\n\nQuestion: ${userMessage}\n\nData: ${dataAnswer}` },
+  ];
+  const result = await callAI(messages, 400);
+  return result || dataAnswer;
 }
 
 export async function generateEmailDraft(contact, context) {
-  const apiKey = getApiKey();
   const system = buildSystemPrompt(context, 'Draft a professional email.');
   const prompt = `Write a short, warm email to ${contact.name} (${contact.role || 'contact'}). Context: they last connected ${contact.last || 'recently'}. Warmth level: ${Math.round((contact.warmth || 0.5) * 100)}%. ${contact.ai ? 'AI note: ' + contact.ai : ''}. Keep it to 3-4 sentences. Return ONLY the email body, no subject line.`;
 
-  if (apiKey) {
-    const result = await callOpenRouter([
-      { role: 'system', content: system },
-      { role: 'user', content: prompt },
-    ], 300);
-    if (result) return result;
-  }
-  return `Hey ${contact.name?.split(' ')[0] || 'there'},\n\nHope you're doing well. I wanted to check in — it's been a bit since we last connected. Let me know if you have time to catch up soon.\n\nBest,\n${context.user?.name || 'Lior'}`;
+  const result = await callAI([
+    { role: 'system', content: system },
+    { role: 'user', content: prompt },
+  ], 300);
+  return result || `Hey ${contact.name?.split(' ')[0] || 'there'},\n\nHope you're doing well. I wanted to check in — it's been a bit since we last connected. Let me know if you have time to catch up soon.\n\nBest,\n${context.user?.name || 'Lior'}`;
 }
 
 export async function generateDailyBriefing(context) {
-  const apiKey = getApiKey();
   const system = buildSystemPrompt(context, 'Generate a 2-3 sentence daily briefing.');
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -233,13 +240,11 @@ export async function generateDailyBriefing(context) {
   const overdueTasks = (context.tasks || []).filter(t => t.status !== 'done' && /past/i.test(t.due));
   const prompt = `Today is ${dateStr}. The user has ${todayTasks.length} tasks due today, ${overdueTasks.length} overdue, and ${context.notes?.length || 0} notes. Their top priority P0 tasks are: ${(context.tasks || []).filter(t => t.priority === 'P0' && t.status !== 'done').map(t => t.title).join(', ') || 'none set'}. Give a 2-3 sentence briefing on what to focus on today. Be concise and actionable.`;
 
-  if (apiKey) {
-    const result = await callOpenRouter([
-      { role: 'system', content: system },
-      { role: 'user', content: prompt },
-    ], 200);
-    if (result) return result;
-  }
+  const result = await callAI([
+    { role: 'system', content: system },
+    { role: 'user', content: prompt },
+  ], 200);
+  if (result) return result;
   const p0 = context.tasks?.filter(t => t.priority === 'P0' && t.status !== 'done');
   if (p0?.length > 0) return `Today's focus: ${p0[0].title}${p0.length > 1 ? ` and ${p0.length - 1} other P0 task(s)` : ''}. ${overdueTasks.length > 0 ? `${overdueTasks.length} overdue item(s) need attention too.` : 'Stay on track.'}`;
   return `${todayTasks.length} task(s) due today, ${overdueTasks.length} overdue. Start with the highest priority and work down.`;
@@ -363,18 +368,49 @@ function queryUserData(query, state) {
   }
 
   // ─── Check-in / greeting ───
-  if (/hello|hi|hey|good (morning|afternoon|evening)/i.test(q)) {
+  if (/^(hello|hi|hey|good (morning|afternoon|evening)|sup|yo)$/i.test(q)) {
     const h = now.getHours();
     const greet = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
-    const openTasks = (state.tasks || []).filter(t => t.status !== 'done').length;
-    const todayTasks = (state.tasks || []).filter(t => /today/i.test(t.due) && t.status !== 'done').length;
-    return `Good ${greet}. You have ${openTasks} open tasks, ${todayTasks} due today. What can I help you with?`;
+    const greetings = [
+      `Hey! Good ${greet}. I'm here. What's on your mind?`,
+      `Hi there. Ready to get things done today?`,
+      `Hello! I've got your context loaded. How can I help?`,
+      `Hey. Good ${greet}! Anything specific you want to tackle?`
+    ];
+    return greetings[Math.floor(Math.random() * greetings.length)];
+  }
+
+  // ─── Small talk / How are you ───
+  if (/how are you|how do you do/i.test(q)) {
+    return "I'm doing great, thanks for asking! My memory cache is warm and I'm ready to execute. How are you doing today?";
+  }
+  if (/thank|thanks|appreciate/i.test(q)) {
+    return "You're very welcome! Let me know if you need anything else.";
+  }
+  
+  // ─── Gibberish / Too short ───
+  // If the query has no spaces and doesn't match known keywords, and looks like random typing
+  if (q.length < 15 && !/\s/.test(q) && !/task|note|event|contact/i.test(q)) {
+    const fallbacks = [
+      "Hmm, I didn't quite catch that. Could you rephrase?",
+      "Sorry, was that a typo? I'm listening.",
+      "I didn't understand that. You can ask me about your tasks, notes, or schedule!",
+      "Not sure I follow. Want me to pull up your agenda for the day?"
+    ];
+    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
   }
 
   // ─── Default ───
   const openTasks = (state.tasks || []).filter(t => t.status !== 'done').length;
   const noteCount = (state.notes || []).length;
-  return `I see ${openTasks} open tasks and ${noteCount} notes. Try asking about meetings, tasks, contacts, notes, or reminders — I can look up anything in your data.`;
+  
+  const defaultReplies = [
+    `I'm not exactly sure what you mean. But I see you have ${openTasks} open tasks right now. Try asking me to schedule a meeting or create a task.`,
+    `I don't have a specific answer for that. As a reminder, you've got ${openTasks} pending tasks and ${noteCount} notes I can search through.`,
+    `I'm still learning! If you want, I can help you look up a contact, read a note, or manage your schedule.`,
+    `I didn't quite get that. Could you give me a bit more detail?`
+  ];
+  return defaultReplies[Math.floor(Math.random() * defaultReplies.length)];
 }
 
 export async function fetchAndSummarizeUrl(url) {
@@ -421,22 +457,11 @@ export async function fetchAndSummarizeUrl(url) {
     const truncated = textContent.slice(0, 6000);
 
     // Try AI summarization
-    const apiKey = getApiKey();
-    if (apiKey) {
-      const result = await callOpenRouter([
-        {
-          role: 'system',
-          content: 'You are a website summarizer. Given the URL and page content, provide: 1) A 2-3 sentence summary of what the page is about, 2) Key points (bullet list, max 5), 3) The estimated reading time. Be concise and practical.'
-        },
-        {
-          role: 'user',
-          content: `URL: ${normalizedUrl}\n\nPage content:\n${truncated}`
-        }
-      ], 400);
-      if (result) {
-        return { summary: result, url: normalizedUrl, textContent, success: true };
-      }
-    }
+    const aiResult = await callAI([
+      { role: 'system', content: 'You are a website summarizer. Given the URL and page content, provide: 1) A 2-3 sentence summary of what the page is about, 2) Key points (bullet list, max 5), 3) The estimated reading time. Be concise and practical.' },
+      { role: 'user', content: `URL: ${normalizedUrl}\n\nPage content:\n${truncated}` }
+    ], 400);
+    if (aiResult) return { summary: aiResult, url: normalizedUrl, textContent, success: true };
 
     // Heuristic fallback
     const lines = textContent.split('\n').filter(l => l.trim().length > 30).slice(0, 8);
@@ -448,3 +473,88 @@ export async function fetchAndSummarizeUrl(url) {
 }
 
 export { heuristicTitle, heuristicTag, heuristicIcon, heuristicSummary };
+
+/* ─── NEW: Generate subtasks for a task ─────────────────────── */
+export async function generateSubtasks(taskTitle, context) {
+  const prompt = `For the task "${taskTitle}", generate 3-5 concrete, actionable subtasks. Return ONLY a JSON array of strings like ["subtask 1","subtask 2"]. No explanation.`;
+  const result = await callAI([{ role: 'user', content: prompt }], 200);
+  if (result) {
+    try {
+      const arr = JSON.parse(result.match(/\[[\s\S]*\]/)?.[0] || '[]');
+      if (Array.isArray(arr) && arr.length) return arr.map(s => ({ title: String(s), done: false }));
+    } catch {}
+  }
+  // Heuristic fallback
+  return [
+    { title: `Research ${taskTitle}`, done: false },
+    { title: `Draft plan for ${taskTitle}`, done: false },
+    { title: `Execute and review ${taskTitle}`, done: false },
+  ];
+}
+
+/* ─── NEW: Extract action items from note content ────────────── */
+export async function extractTasksFromNote(noteTitle, noteContent) {
+  const prompt = `From this note titled "${noteTitle}", extract all action items and tasks. Return ONLY a JSON array like [{"title":"task 1","priority":"P2"},{"title":"task 2","priority":"P1"}]. Priority: P0=critical, P1=high, P2=normal, P3=low. If no tasks found, return []. No explanation.\n\nNote:\n${noteContent?.slice(0, 2000)}`;
+  const result = await callAI([{ role: 'user', content: prompt }], 300);
+  if (result) {
+    try {
+      const arr = JSON.parse(result.match(/\[[\s\S]*\]/)?.[0] || '[]');
+      if (Array.isArray(arr)) return arr.map(t => ({ title: String(t.title || t), priority: t.priority || 'P2', due: 'Today', status: 'todo', project: 'General' }));
+    } catch {}
+  }
+  // Heuristic: lines with action words
+  const lines = (noteContent || '').split('\n').filter(l => /\b(need to|should|must|will|todo|action|follow up|schedule|call|email|review|send|write|create|finish|complete)\b/i.test(l));
+  return lines.slice(0, 5).map(l => ({ title: l.replace(/^[-*•>\s]+/, '').trim().slice(0, 80), priority: 'P2', due: 'Today', status: 'todo', project: 'General' }));
+}
+
+/* ─── NEW: Enhance/improve a note with AI ───────────────────── */
+export async function generateNoteEnhancement(title, content) {
+  if (!content?.trim()) return null;
+  const result = await callAI([
+    { role: 'system', content: 'You are a writing assistant. Improve the clarity, structure and readability of the user\'s note. Preserve all facts. Add headers if helpful. Keep it concise.' },
+    { role: 'user', content: `Note title: "${title}"\n\nContent:\n${content.slice(0, 3000)}\n\nReturn the improved note content only.` },
+  ], 500);
+  return result || null;
+}
+
+/* ─── NEW: Generate relationship insight for a contact ──────── */
+export async function generateContactInsight(contact, context) {
+  const warmthPct = Math.round((contact.warmth || 0.5) * 100);
+  const prompt = `Contact: ${contact.name}, Role: ${contact.role || 'unknown'}, Last contact: ${contact.last || 'unknown'}, Warmth: ${warmthPct}%. Existing note: "${contact.ai || 'none'}". Give one sentence of relationship advice (e.g. whether to reach out, what to say, warmth level). Max 20 words.`;
+  const result = await callAI([{ role: 'user', content: prompt }], 80);
+  if (result) return result;
+  if (warmthPct < 40) return `Low warmth — consider reaching out to ${contact.name?.split(' ')[0] || 'them'} soon.`;
+  if (warmthPct > 70) return `Strong relationship — keep the momentum with a quick check-in.`;
+  return `Moderate relationship — a short message would warm things up.`;
+}
+
+/* ─── NEW: Parse natural language task input ─────────────────── */
+export async function parseNaturalLanguageTask(input, context) {
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+  const prompt = `Parse this task input into structured data. Today is ${today}.\nInput: "${input}"\nReturn ONLY valid JSON: {"title":"...","priority":"P0|P1|P2|P3","due":"Today|Tomorrow|Mon|Tue|Wed|Thu|Fri|Next week|Whenever","project":"General|Product|Engineering|Design|Fundraise|Hiring|Ops|Team","recurring":null}\nPriority rules: urgent/critical/asap=P0, important/high=P1, normal=P2, low/whenever=P3\nDue rules: tomorrow=Tomorrow, day names=that day, next week=Next week, default=Today`;
+  const result = await callAI([{ role: 'user', content: prompt }], 150);
+  if (result) {
+    try {
+      const obj = JSON.parse(result.match(/\{[\s\S]*\}/)?.[0] || '{}');
+      if (obj.title) return obj;
+    } catch {}
+  }
+  // Heuristic parse
+  const lower = input.toLowerCase();
+  const priority = /\b(p0|critical|urgent|asap)\b/.test(lower) ? 'P0'
+    : /\b(p1|important|high)\b/.test(lower) ? 'P1'
+    : /\b(p3|low|whenever)\b/.test(lower) ? 'P3' : 'P2';
+  const due = /\btomorrow\b/.test(lower) ? 'Tomorrow'
+    : /\bnext week\b/.test(lower) ? 'Next week'
+    : /\bmonday|mon\b/.test(lower) ? 'Mon'
+    : /\btuesday|tue\b/.test(lower) ? 'Tue'
+    : /\bwednesday|wed\b/.test(lower) ? 'Wed'
+    : /\bthursday|thu\b/.test(lower) ? 'Thu'
+    : /\bfriday|fri\b/.test(lower) ? 'Fri' : 'Today';
+  const project = /\bproduct|feature|ship\b/.test(lower) ? 'Product'
+    : /\bengineer|code|api|bug\b/.test(lower) ? 'Engineering'
+    : /\bdesign|ui|ux\b/.test(lower) ? 'Design'
+    : /\bhire|hiring|interview\b/.test(lower) ? 'Hiring'
+    : /\bfund|investor|pitch\b/.test(lower) ? 'Fundraise' : 'General';
+  return { title: input.replace(/\b(p0|p1|p2|p3|tomorrow|next week|today|urgent|asap|critical)\b/gi, '').replace(/\s+/g, ' ').trim() || input, priority, due, project, recurring: null };
+}

@@ -199,7 +199,7 @@ export const Auth = ({ onAuth }) => {
 
                 <button
                   type="button"
-                  onClick={() => onAuth({ id: 'dev_user', email: 'dev@local.host', name: 'Dev User', avatar: 'DV' })}
+                  onClick={() => onAuth({ id: '00000000-0000-0000-0000-000000000001', email: 'dev@local.host', name: 'Dev User', avatar: 'DV' })}
                   disabled={loading}
                   style={{
                     marginTop: 10,
