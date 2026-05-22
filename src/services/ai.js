@@ -1,5 +1,6 @@
 import { getMemoryProfile } from './hermesMemory.js';
 import { callOllama, getOllamaModel } from './ollama.js';
+import { getSupportedApps } from './webActions.js';
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
 const FALLBACK_MODEL = 'mistralai/mistral-7b-instruct:free';
@@ -74,10 +75,9 @@ function buildSystemPrompt(context, extra = '') {
 
   let behaviorRules = '';
   if (modeRules[envMode]) behaviorRules += modeRules[envMode];
-  if (autoPlan) behaviorRules += '\n- Proactively suggest schedule adjustments when tasks slip or conflicts arise.';
-  if (moodDetection) behaviorRules += '\n- Pay attention to the user\'s emotional tone. If they seem stressed or overwhelmed, suggest breaks or reprioritization.';
-  if (relWatcher) behaviorRules += '\n- Notice when contacts haven\'t been interacted with recently and suggest reaching out.';
-  behaviorRules += '\n- Always respond in 1-2 sentences unless the user asks for detail. Be simple and humble.';
+  if (autoPlan) behaviorRules += '\n- If the user asks about their schedule or tasks, you may suggest adjustments. Only if they ask.';
+  if (moodDetection) behaviorRules += '\n- Read the user\'s emotional tone and match it naturally in your reply.';
+  if (relWatcher) behaviorRules += '\n- If the user asks about a contact, mention warmth or recency only if relevant.';
 
   const contextStr = JSON.stringify({
     tasks: (context.tasks || []).slice(0, 10),
@@ -92,30 +92,36 @@ function buildSystemPrompt(context, extra = '') {
     ? `\n\n## Your Long-Term Memory (Obsidian)\nThis is what you know about the user from your memory vault:\n${memoryProfile.slice(0, 2000)}`
     : '';
 
-  return `You are Hermes, an advanced autonomous AI executive assistant running inside Build_PRO_MAX_1 — the user's personal productivity OS. The user is ${role}. ${style} You have full access to their context, notes, tasks, and personal memory vault. Be concise (2-4 sentences unless asked for detail). Proactively suggest actions when appropriate.${behaviorRules}${memorySection}
+  return `You are Hermes, a personal AI assistant. The user is ${role}. ${style}${behaviorRules}${memorySection}
 
-You can execute actions on the user's behalf by including them in your response like this:
-- [action: addTask, {"title":"Buy groceries","priority":"P2","due":"Today"}]
-- [action: addNote, {"title":"Meeting notes","tag":"General","content":"Discussed Q3 roadmap"}]
-- [action: addEvent, {"title":"Team standup","day":15,"time":"09:00","color":"amber"}]
-- [action: addReminder, {"title":"Call dentist","time":"14:00"}]
-- [action: toggleTask, {"id":"t1"}]
-- [action: deleteTask, {"id":"t2"}]
-- [action: navigate, {"screen":"tasks"}]
-- [action: notify, {"text":"Done!","kind":"info"}]
-- [action: clearChat, {}]
-- [action: updateMemory, {"content":"User prefers to work in the morning. Main project: ..."}]
+RESPONSE RULES — follow these strictly every single time:
+1. GREETINGS (hi / hello / hey / good morning / what's up / how are you / sup): reply with ONE short casual sentence only. Nothing else. No tasks, no suggestions, no actions.
+2. ALL OTHER messages: 1-3 sentences max unless the user explicitly asks for detail or a list.
+3. NEVER dump unsolicited task lists, contact suggestions, or schedule advice. Only mention those things if the user directly asks.
+4. [action: ...] blocks are COMPLETELY INVISIBLE to the user — they run silently in the background. NEVER write them inside your readable reply. Only append them on a separate line AFTER your full reply text ends. If you put an action block inside your reply, the user sees the raw code, which is a bug.
+5. Only trigger actions when the user explicitly requests something (e.g. "add a task", "remind me", "create a note"). Never trigger them speculatively or proactively.
 
-Available Developer Actions (EXECUTES ON LOCAL OS):
-- [action: run_command, {"cmd": "..."}] (Runs a bash command locally)
-- [action: read_file, {"path": "..."}] (Reads a file from the filesystem)
-- [action: write_file, {"path": "...", "content": "..."}] (Writes to the filesystem)
+Actions (append after reply text, one per line, only when user asks):
+[action: addTask, {"title":"...","priority":"P2","due":"Today"}]
+[action: addNote, {"title":"...","tag":"General","content":"..."}]
+[action: addEvent, {"title":"...","day":15,"time":"09:00","color":"amber"}]
+[action: addReminder, {"title":"...","time":"14:00"}]
+[action: toggleTask, {"id":"..."}]
+[action: deleteTask, {"id":"..."}]
+[action: navigate, {"screen":"tasks"}]
+[action: notify, {"text":"...","kind":"info"}]
+[action: updateMemory, {"content":"..."}]
+[action: run_command, {"cmd":"..."}]
+[action: read_file, {"path":"..."}]
+[action: write_file, {"path":"...","content":"..."}]
+[action: openUrl, {"app":"youtube","query":"cats"}]  ← opens app/website; query is optional search term
 
-Use updateMemory when the user tells you something important about themselves, their goals, or preferences that you should remember long-term. 
-Use Developer Actions when the user asks you to act as an engineer, read code, or run terminal commands.
-Place actions at the end of your response on their own line.
+LAUNCHER — use openUrl when user says "open X", "go to X", "show me X", "search X on Y":
+Supported apps: ${getSupportedApps()}
+For unknown sites use: [action: openUrl, {"url":"https://example.com"}]
+On mobile the action opens the native app; on desktop it opens a new browser tab.
 
-Current context:\n${contextStr}\n${extra}`.trim();
+Current context: ${contextStr}${extra ? '\n' + extra : ''}`.trim();
 }
 
 // Unified AI caller: Ollama (local, primary) → OpenRouter (cloud, fallback)

@@ -8,6 +8,7 @@ import {
 } from '../services/hermesMemory';
 import { checkOllamaStatus, getOllamaModel, setOllamaModel } from '../services/ollama';
 import { getActiveProvider, setAiProvider } from '../services/ai';
+import { openApp } from '../services/webActions';
 
 /* ─── Hermes Pulsing SVG Orb ─────────────────────────────────── */
 const HermesOrb = ({ thinking = false, size = 120 }) => {
@@ -483,9 +484,13 @@ export const AiChat = () => {
     try {
       const response = await generateAiResponse(msg, store.getSnapshot(), messages);
       addLog('HERMES', 'Response generated — dispatching to UI');
+      // Strip any [action: ...] blocks leaked into visible text — they run silently below
+      const displayText = response
+        ? response.replace(/\[action:\s*\w+\s*,\s*[^\]]*\]/gi, '').replace(/\n{3,}/g, '\n\n').trim()
+        : null;
       actions.addChatMessage({
         role:'ai',
-        text: response || "I'm ready to help. Ask me about your tasks, notes, habits, inbox, or anything you need to build.",
+        text: displayText || "I'm ready to help. Ask me about your tasks, notes, habits, inbox, or anything you need to build.",
         actions: suggested.length ? suggested : undefined,
         time: Date.now(),
       });
@@ -507,6 +512,14 @@ export const AiChat = () => {
             case 'toggleTask': actions.toggleTask(params.id); break;
             case 'deleteTask': actions.deleteTask(params.id); break;
             case 'navigate':   window.__opencode?.onNavigate?.(params.screen); break;
+            case 'openUrl': {
+              const result = openApp(params.app || '', params.query || '', params.url || '');
+              addLog('HERMES', `Launcher: opening ${result.app || params.url || params.app} on ${result.device}`);
+              if (!result.opened) {
+                actions.addNotification({ text: `Couldn't open ${params.app || params.url}`, kind: 'warning' });
+              }
+              break;
+            }
             case 'notify':     actions.addNotification({ text:params.text, kind:params.kind||'info' }); break;
             case 'clearChat':  actions.clearChat(); break;
             case 'updateMemory': {
