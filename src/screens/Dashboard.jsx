@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { GlassCard, PaperButton, Avatar, Icon, AiOrb } from '../components/ui/Icons';
 import { EnvironmentBadge } from '../components/ui/EnvironmentBadge';
+import { CpuArchitecture } from '../components/ui/CpuArchitecture';
 import { accentColor } from '../data';
 import { useApp, useAppStore } from '../store/AppContext';
 import { formatTime, formatDate, sendNotification, getGreeting } from '../services/clock';
@@ -10,6 +11,7 @@ import { generateDailyBriefing, parseNaturalLanguageTask } from '../services/ai'
 const CARDS = [
   { id: "hello",    w: 2, h: 1, accent: "amber",  render: HelloCard },
   { id: "focus",   w: 1, h: 1, accent: "coral",  render: FocusCard },
+  { id: "cpu",     w: 1, h: 2, accent: "orange", render: CpuCard },
   { id: "schedule",w: 2, h: 2, accent: "orange", render: ScheduleCard },
   { id: "tasks",   w: 1, h: 2, accent: "amber",  render: TasksCard },
   { id: "goals",   w: 2, h: 1, accent: "rose",   render: GoalsCard },
@@ -142,6 +144,7 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
     notes: 'notes',
     devices: 'files',
     streak: 'notes',
+    cpu: 'chat',
   };
 
   const handleCardClick = (cardId) => {
@@ -230,7 +233,7 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
                 value={captureInput}
                 onChange={e => setCaptureInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleCapture(); if (e.key === 'Escape') { setShowCapture(false); setCaptureInput(''); } }}
-                style={{ all: 'unset', fontSize: 12, color: 'var(--ink-1)', fontFamily: 'var(--font-body)', padding: '6px 10px', borderRadius: 8, background: 'rgba(255,252,244,.9)', border: '0.5px solid rgba(26,20,16,.12)', width: 260 }}
+                style={{ all: 'unset', fontSize: 12, color: 'var(--ink-1)', fontFamily: 'var(--font-body)', padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,.07)', border: '0.5px solid rgba(255,255,255,.12)', width: 260 }}
               />
               <PaperButton icon="plus" primary small onClick={handleCapture} disabled={!captureInput.trim()}>Save</PaperButton>
               <button type="button" onClick={() => { setShowCapture(false); setCaptureInput(''); }} style={{ fontSize: 12, color: 'var(--ink-3)', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
@@ -405,16 +408,16 @@ const ExpandedCard = ({ card, data, onClose, onNavigate, actions }) => {
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "min(1100px, 100%)", height: "min(720px, 100%)",
-          background: "rgba(255, 252, 244, 0.88)",
-          backdropFilter: "blur(40px) saturate(180%)",
-          WebkitBackdropFilter: "blur(40px) saturate(180%)",
-          border: "0.5px solid rgba(255,255,255,.85)",
+          background: "rgba(18,18,18,0.92)",
+          backdropFilter: "blur(40px) saturate(160%)",
+          WebkitBackdropFilter: "blur(40px) saturate(160%)",
+          border: "0.5px solid rgba(255,255,255,.12)",
           borderRadius: 28,
           boxShadow: `
-            0 2px 1px rgba(255, 252, 244, 0.95) inset,
-            0 -1px 1px rgba(0,0,0,.06) inset,
-            0 50px 100px -20px rgba(46,30,12,.45),
-            0 16px 36px -12px rgba(46,30,12,.25)`,
+            0 1px 0 rgba(255,255,255,.08) inset,
+            0 -1px 0 rgba(0,0,0,.30) inset,
+            0 50px 100px -20px rgba(0,0,0,.65),
+            0 16px 36px -12px rgba(0,0,0,.40)`,
           animation: "genie-in 520ms var(--ease-genie)",
           transformOrigin: "center bottom",
           overflow: "hidden",
@@ -558,7 +561,7 @@ function ScheduleCard({ data, expanded, accent, actions, onNavigate }) {
         })}
       </div>
       {expanded &&
-      <div style={{ marginTop: 20, padding: 16, borderRadius: 14, background: "rgba(245,165,36,.10)", border: "0.5px solid rgba(245,165,36,.25)" }}>
+      <div style={{ marginTop: 20, padding: 16, borderRadius: 14, background: "rgba(245,165,36,.08)", border: "0.5px solid rgba(245,165,36,.22)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
             <AiOrb size={20} />
             <span className="t-cap" style={{ color: "var(--accent-orange)" }}>AI · gentle nudge</span>
@@ -673,7 +676,7 @@ function AiInboxCard({ data, expanded, accent }) {
       </div>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, minHeight: 0, overflow: "hidden" }}>
         {(data.aiSuggestions || []).map((s, i) =>
-        <div key={i} style={{ padding: "8px 10px", borderRadius: 9, background: "rgba(255,252,244,.5)", border: "0.5px solid rgba(26,20,16,.06)" }}>
+        <div key={i} style={{ padding: "8px 10px", borderRadius: 9, background: "rgba(255,255,255,.05)", border: "0.5px solid rgba(255,255,255,.08)" }}>
             <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: accent, marginBottom: 3 }}>
               {s.kind}
             </div>
@@ -746,9 +749,37 @@ function DevicesCard({ data, expanded, accent, onNavigate }) {
           </div>
         )}
       </button>
-      <div style={{ marginTop: 14, padding: "8px 10px", borderRadius: 8, background: "rgba(26,20,16,.04)", fontSize: 10.5, color: "var(--ink-3)", display: "flex", alignItems: "center", gap: 6 }}>
+      <div style={{ marginTop: 14, padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,.04)", fontSize: 10.5, color: "var(--ink-3)", display: "flex", alignItems: "center", gap: 6 }}>
         <Icon name="sync" size={11} />
         <span>Synced just now</span>
+      </div>
+    </div>
+  );
+}
+
+function CpuCard({ expanded, accent }) {
+  return (
+    <div style={{
+      padding: expanded ? 0 : 16,
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    }}>
+      <div className="t-cap" style={{ color: accent, alignSelf: 'flex-start' }}>AI CORE</div>
+      <div style={{ flex: 1, width: '100%', minHeight: 0 }}>
+        <CpuArchitecture text="HERMES" lineMarkerSize={5} />
+      </div>
+      <div style={{
+        fontSize: 9,
+        fontFamily: 'var(--font-mono)',
+        letterSpacing: '0.12em',
+        color: 'var(--ink-3)',
+        textTransform: 'uppercase',
+      }}>
+        Mistral · Online
       </div>
     </div>
   );

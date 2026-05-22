@@ -2,14 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Icon, AiOrb, Avatar } from '../ui/Icons';
 import { DOCK_ITEMS, accentColor } from '../../data';
 import { FocusToggle } from '../focus/FocusToggle';
-
-const DOCK_ITEM_SIZE = 44;
-const DOCK_ITEM_GAP = 8;
-
-function mag(distance, max = 1.5, falloff = 110) {
-  const t = Math.max(0, 1 - distance / falloff);
-  return 1 + (max - 1) * (1 - Math.pow(1 - t, 3));
-}
+import { MacOSDock } from '../ui/MacOSDock';
 
 function useIsMobile(breakpoint = 768) {
   const [isMobile, setIsMobile] = useState(
@@ -23,132 +16,21 @@ function useIsMobile(breakpoint = 768) {
   return isMobile;
 }
 
-export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, onOpenFocus, focusMode = "off", recentActions = [], hasNotifications = false }) => {
-  const [mouseX, setMouseX] = useState(null);
-  const [itemRects, setItemRects] = useState({});
-  const [hoveredId, setHoveredId] = useState(null);
-  const itemRefs = useRef({});
+export const Dock = ({ active, onSelect, variant = "dock", onOpenCmdK, onOpenFocus, focusMode = "off", hasNotifications = false }) => {
   const isMobile = useIsMobile(768);
-
-  useEffect(() => {
-    if (mouseX === null) return;
-    const rects = {};
-    DOCK_ITEMS.forEach(item => {
-      const el = itemRefs.current[item.id];
-      if (el) {
-        const r = el.getBoundingClientRect();
-        rects[item.id] = r.left + r.width / 2;
-      }
-    });
-    setItemRects(rects);
-  }, [mouseX]);
 
   if (variant === "rail") return <SideRail active={active} onSelect={onSelect} onOpenCmdK={onOpenCmdK} onOpenFocus={onOpenFocus} focusMode={focusMode} hasNotifications={hasNotifications} />;
   if (variant === "top" || isMobile) return null;
 
   return (
-    <div
-      onMouseMove={(e) => setMouseX(e.clientX)}
-      onMouseLeave={() => setMouseX(null)}
-      className="dock-awards"
-      style={{
-        position: "fixed", left: "50%", bottom: 18, transform: "translateX(-50%)",
-        zIndex: 50, display: "flex", alignItems: "center", gap: DOCK_ITEM_GAP,
-        padding: "10px 16px",
-        borderRadius: 20,
-      }}>
-      <div style={{
-        position: "absolute", left: "20%", right: "20%", bottom: 0, height: 1,
-        background: "linear-gradient(90deg, transparent, rgba(245,165,36,.5), rgba(231,64,46,.5), rgba(42,111,219,.5), transparent)",
-        filter: "blur(0.5px)", borderRadius: 1, pointerEvents: "none"
-      }} />
-
-      {DOCK_ITEMS.map((item) => {
-        const isActive = active === item.id;
-        const center = itemRects[item.id];
-        const scale = mouseX !== null && center ? mag(Math.abs(mouseX - center)) : 1;
-        const lift = (scale - 1) * 18;
-        return (
-          <div key={item.id} style={{ position: "relative", width: DOCK_ITEM_SIZE, height: DOCK_ITEM_SIZE, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <button
-              ref={(el) => { if (el) itemRefs.current[item.id] = el; }}
-              onClick={() => onSelect(item.id)}
-              aria-label={item.label}
-              aria-current={isActive ? "page" : undefined}
-              onMouseEnter={() => setHoveredId(item.id)}
-              onMouseLeave={() => setHoveredId(null)}
-              className="magnetic-btn"
-              style={{
-                width: DOCK_ITEM_SIZE, height: DOCK_ITEM_SIZE, borderRadius: 12,
-                background: isActive
-                  ? `linear-gradient(180deg, ${accentColor[item.accent]}22, ${accentColor[item.accent]}10)`
-                  : "rgba(255, 252, 244, 0.5)",
-                border: "0.5px solid rgba(255,255,255,.7)",
-                boxShadow: isActive
-                  ? `0 1px 0 rgba(255,255,255,.9) inset, 0 0 0 1px ${accentColor[item.accent]}33, 0 4px 10px -2px ${accentColor[item.accent]}55`
-                  : "0 1px 0 rgba(255,255,255,.7) inset, 0 2px 4px -1px rgba(46,30,12,.10)",
-                transform: `scale(${scale}) translateY(${-lift}px)`,
-                transformOrigin: "center bottom",
-                transition: mouseX === null ? "transform 250ms var(--ease-glass)" : "transform 90ms ease-out",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: isActive ? accentColor[item.accent] : "var(--ink-1)",
-                position: "relative",
-              }}>
-              {item.isAi ? <AiOrb size={26 * scale} intensity={1.1} /> : <Icon name={item.icon} size={22} stroke={1.6} />}
-              {(recentActions.includes(item.id) || (hasNotifications && item.id === 'dashboard')) && (
-                <div style={{
-                  position: "absolute", top: -4, right: -4,
-                  width: 9, height: 9, borderRadius: "50%",
-                  background: recentActions.includes(item.id) ? accentColor[item.accent] : "var(--accent-coral)",
-                  boxShadow: `0 0 8px ${recentActions.includes(item.id) ? accentColor[item.accent] : "var(--accent-coral)"}, 0 0 0 1.5px var(--paper-0)`
-                }} />
-              )}
-            </button>
-            {hoveredId === item.id && (
-              <div style={{
-                position: "absolute", left: "50%", bottom: DOCK_ITEM_SIZE + lift + 10,
-                transform: "translateX(-50%)",
-                padding: "4px 10px", borderRadius: 8,
-                background: "rgba(26, 20, 16, 0.88)",
-                color: "#fff8e8", fontSize: 11, fontWeight: 500,
-                whiteSpace: "nowrap", pointerEvents: "none",
-                boxShadow: "0 8px 20px -4px rgba(0,0,0,.3)",
-                animation: 'pop-in 180ms var(--ease-genie) both',
-                zIndex: 100,
-              }}>{item.label}</div>
-            )}
-            {isActive && (
-              <div style={{
-                position: "absolute", bottom: -8, width: 4, height: 4, borderRadius: "50%",
-                background: accentColor[item.accent],
-                boxShadow: `0 0 8px ${accentColor[item.accent]}`,
-              }} />
-            )}
-          </div>
-        );
-      })}
-
-      <div style={{ width: 1, height: DOCK_ITEM_SIZE - 12, margin: `0 ${DOCK_ITEM_GAP / 2}px`, background: "rgba(26,20,16,.10)" }} />
-
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <FocusToggle focusMode={focusMode} onClick={onOpenFocus} />
-        <button
-          onClick={onOpenCmdK}
-          title="AI command bar (⌘K)"
-          aria-label="Open AI command bar"
-          style={{
-            width: DOCK_ITEM_SIZE, height: DOCK_ITEM_SIZE, borderRadius: 12,
-            background: "rgba(26, 20, 16, 0.86)",
-            border: "0.5px solid rgba(255,255,255,.10)",
-            boxShadow: "0 1px 0 rgba(255,255,255,.10) inset, 0 4px 10px -2px rgba(0,0,0,.30)",
-            color: "#fff8e8",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 500,
-          }}>
-          ⌘K
-        </button>
-      </div>
-    </div>
+    <MacOSDock
+      active={active}
+      onSelect={onSelect}
+      onOpenCmdK={onOpenCmdK}
+      onOpenFocus={onOpenFocus}
+      focusMode={focusMode}
+      hasNotifications={hasNotifications}
+    />
   );
 };
 
