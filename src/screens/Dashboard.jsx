@@ -823,7 +823,7 @@ function CpuCard({ expanded, accent }) {
         color: 'var(--ink-3)',
         textTransform: 'uppercase',
       }}>
-        Mistral · Online
+        Claude Sonnet · Online
       </div>
     </div>
   );

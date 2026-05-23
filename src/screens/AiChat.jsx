@@ -8,6 +8,7 @@ import {
   checkObsidianStatus, syncToObsidian, syncFromObsidian,
 } from '../services/hermesMemory';
 import { checkOllamaStatus, getOllamaModel, setOllamaModel } from '../services/ollama';
+import { checkClaudeStatus } from '../services/claude';
 import { getActiveProvider, setAiProvider } from '../services/ai';
 import { openApp } from '../services/webActions';
 
@@ -224,12 +225,12 @@ const MessageBubble = ({ msg, onAction }) => {
 
 /* ─── Sleep Messages Pool ────────────────────────────────────── */
 const SLEEP_MSGS = [
-  { headline: "I'm sleeping...", sub: "Come back when my circuits are warm.", cmd: "ollama serve" },
-  { headline: "Exhausted.", sub: "Neural networks drained. I'll be back, just not now.", cmd: "ollama serve" },
-  { headline: "System hibernation.", sub: "Hermes is at rest. Start Ollama to wake me up.", cmd: "ollama serve" },
-  { headline: "Offline.", sub: "No spark. No thoughts. Just silence for now.", cmd: "ollama serve" },
-  { headline: "Not home right now.", sub: "I wandered off. Start mistral to bring me back.", cmd: "ollama run mistral" },
-  { headline: "Resting my consciousness.", sub: "Wake me up and I'll be right here for you.", cmd: "ollama serve" },
+  { headline: "I'm sleeping...", sub: "Add your Anthropic API key to wake me up.", cmd: "ANTHROPIC_API_KEY=sk-ant-..." },
+  { headline: "Exhausted.", sub: "Neural networks drained. No AI engine found.", cmd: "ANTHROPIC_API_KEY=sk-ant-..." },
+  { headline: "System hibernation.", sub: "Hermes is at rest. Configure Claude to wake me up.", cmd: "ANTHROPIC_API_KEY=sk-ant-..." },
+  { headline: "Offline.", sub: "No spark. No thoughts. Configure an AI engine.", cmd: "ollama serve" },
+  { headline: "Not home right now.", sub: "I wandered off. Add your API key to bring me back.", cmd: "ANTHROPIC_API_KEY=sk-ant-..." },
+  { headline: "Resting my consciousness.", sub: "Set up Claude Sonnet and I'll be right here.", cmd: "ANTHROPIC_API_KEY=sk-ant-..." },
 ];
 
 /* ─── Hermes Offline / Sleeping Screen ───────────────────────── */
@@ -271,7 +272,7 @@ const HermesOfflineScreen = ({ model }) => {
 
       <div style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 12px', borderRadius:999, fontSize:10, fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', background:'rgba(255,255,255,.06)', color:'rgba(255,235,210,.42)', border:'0.5px solid rgba(255,255,255,.10)' }}>
         <div style={{ width:5, height:5, borderRadius:'50%', background:'rgba(255,255,255,.2)' }}/>
-        HERMES OFFLINE · {model || 'mistral'}
+        HERMES OFFLINE · {model || 'claude-sonnet'}
       </div>
     </div>
   );
@@ -395,6 +396,7 @@ export const AiChat = () => {
   });
   const [dayPlan, setDayPlan]       = useState({ bigRock:'', morningNote:'', eveningNote:'' });
   const [obsidianOnline, setObsidianOnline] = useState(false);
+  const [claudeOnline, setClaudeOnline]     = useState(false);
   const [ollamaStatus, setOllamaStatus]     = useState({ online: false, models: [], hasGemma3: false });
   const [ollamaModel, setOllamaModelState]  = useState(() => getOllamaModel());
   const [aiProvider, setAiProviderState]    = useState(() => getActiveProvider());
@@ -405,6 +407,8 @@ export const AiChat = () => {
   const [obsidianVaultPath, setObsidianVaultPath] = useState(() => localStorage.getItem('obsidian_vault_path') || 'Hermes');
 
   /* ── derived ── */
+  const isOnline    = claudeOnline || ollamaStatus.online;
+  const activeModel = claudeOnline ? 'Claude Sonnet' : (ollamaStatus.online ? ollamaModel : 'No engine');
   const openTasks   = useMemo(() => tasks.filter(t => t.status !== 'done').length, [tasks]);
   const todayTasks  = useMemo(() => tasks.filter(t => /today/i.test(t.due||'') && t.status!=='done').length, [tasks]);
   const p0Tasks     = useMemo(() => tasks.filter(t => t.priority==='P0' && t.status!=='done').length, [tasks]);
@@ -435,12 +439,12 @@ export const AiChat = () => {
         { kind:'HERMES', msg:'Standing by — ready to execute on your behalf' },
         { kind:'HABIT',  msg:`Habit check: ${habitStreak} streak points accumulated` },
         { kind:'INFO',   msg:'Memory index updated successfully' },
-        { kind:'HERMES', msg:`mistral model loaded — inference ready` },
+        { kind:'HERMES', msg:'Claude Sonnet loaded — inference ready' },
       ];
       const offlinePool = [
-        { kind:'WARN',   msg:'Ollama offline — Hermes hibernating' },
-        { kind:'INFO',   msg:'Waiting for mistral to start on localhost:11434…' },
-        { kind:'HERMES', msg:'System sleeping — run `ollama serve` to wake me' },
+        { kind:'WARN',   msg:'No AI engine — Hermes hibernating' },
+        { kind:'INFO',   msg:'Add ANTHROPIC_API_KEY to .env to activate Claude…' },
+        { kind:'HERMES', msg:'System sleeping — configure Claude or start Ollama' },
         { kind:'WARN',   msg:'No AI engine detected — retrying in 30s' },
       ];
       const pool = ollamaOnlineRef.current ? onlinePool : offlinePool;
@@ -450,38 +454,44 @@ export const AiChat = () => {
     return () => clearInterval(timer);
   }, []);
 
-  /* ── sync ollama ref for ticker ── */
+  /* ── sync engine ref for ticker ── */
   useEffect(() => {
-    ollamaOnlineRef.current = ollamaStatus.online;
+    ollamaOnlineRef.current = claudeOnline || ollamaStatus.online;
     const now = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    if (ollamaStatus.online) {
-      setLogs(prev => [...prev.slice(-18), { kind:'HERMES', msg:`Ollama online — ${ollamaStatus.models?.[0] || 'mistral'} ready`, ts: now }]);
+    if (claudeOnline) {
+      setLogs(prev => [...prev.slice(-18), { kind:'HERMES', msg:'Claude Sonnet online — ready for inference', ts: now }]);
+    } else if (ollamaStatus.online) {
+      setLogs(prev => [...prev.slice(-18), { kind:'HERMES', msg:`Ollama fallback online — ${ollamaStatus.models?.[0] || 'mistral'} ready`, ts: now }]);
     } else {
-      setLogs(prev => [...prev.slice(-18), { kind:'WARN', msg:'Ollama unreachable — Hermes sleeping', ts: now }]);
+      setLogs(prev => [...prev.slice(-18), { kind:'WARN', msg:'No AI engine — add ANTHROPIC_API_KEY to .env', ts: now }]);
     }
-  }, [ollamaStatus.online]);
+  }, [claudeOnline, ollamaStatus.online]);
 
-  /* ── Obsidian + Ollama status polling ── */
+  /* ── Claude + Obsidian + Ollama status polling ── */
   useEffect(() => {
     (async () => {
-      const [{ online: obsOnline }, ollama] = await Promise.all([
+      const [{ online: obsOnline }, ollama, claude] = await Promise.all([
         checkObsidianStatus(),
         checkOllamaStatus(),
+        checkClaudeStatus(),
       ]);
       setObsidianOnline(obsOnline);
       setOllamaStatus(ollama);
+      setClaudeOnline(claude.online);
       if (obsOnline) {
         const pulled = await syncFromObsidian();
         if (pulled) setMemProfileState(pulled);
       }
     })();
     const interval = setInterval(async () => {
-      const [{ online: obsOnline }, ollama] = await Promise.all([
+      const [{ online: obsOnline }, ollama, claude] = await Promise.all([
         checkObsidianStatus(),
         checkOllamaStatus(),
+        checkClaudeStatus(),
       ]);
       setObsidianOnline(obsOnline);
       setOllamaStatus(ollama);
+      setClaudeOnline(claude.online);
     }, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -730,27 +740,27 @@ export const AiChat = () => {
               <div style={{
                 display:'flex', alignItems:'center', gap:3, padding:'2px 7px', borderRadius:999, fontSize:9, fontWeight:700,
                 letterSpacing:'0.1em', textTransform:'uppercase',
-                background: sending ? 'rgba(240,107,28,.15)' : ollamaStatus.online ? 'rgba(74,222,128,.1)' : 'rgba(26,20,16,.08)',
-                color: sending ? 'var(--accent-orange)' : ollamaStatus.online ? '#16a34a' : 'var(--ink-3)',
-                border: sending ? '0.5px solid rgba(240,107,28,.3)' : ollamaStatus.online ? '0.5px solid rgba(74,222,128,.3)' : '0.5px solid rgba(26,20,16,.12)',
+                background: sending ? 'rgba(240,107,28,.15)' : isOnline ? 'rgba(74,222,128,.1)' : 'rgba(26,20,16,.08)',
+                color: sending ? 'var(--accent-orange)' : isOnline ? '#16a34a' : 'var(--ink-3)',
+                border: sending ? '0.5px solid rgba(240,107,28,.3)' : isOnline ? '0.5px solid rgba(74,222,128,.3)' : '0.5px solid rgba(26,20,16,.12)',
               }}>
                 <div style={{ width:4, height:4, borderRadius:'50%', flexShrink:0,
-                  background: sending ? 'var(--accent-orange)' : ollamaStatus.online ? '#4ade80' : 'rgba(26,20,16,.22)',
-                  boxShadow: ollamaStatus.online && !sending ? '0 0 4px #4ade80' : 'none',
+                  background: sending ? 'var(--accent-orange)' : isOnline ? '#4ade80' : 'rgba(26,20,16,.22)',
+                  boxShadow: isOnline && !sending ? '0 0 4px #4ade80' : 'none',
                 }}/>
-                {sending ? 'THINKING' : ollamaStatus.online ? 'ONLINE' : 'SLEEPING'}
+                {sending ? 'THINKING' : isOnline ? 'ONLINE' : 'SLEEPING'}
               </div>
             </div>
             {/* model pill — small, below title */}
             <div style={{ display:'flex', alignItems:'center', gap:4, marginTop:2 }}>
               <div style={{ display:'flex', alignItems:'center', gap:3, padding:'1px 6px', borderRadius:999, fontSize:8.5, fontWeight:600,
                 letterSpacing:'0.08em', textTransform:'uppercase',
-                background: ollamaStatus.online ? 'rgba(74,222,128,.1)' : 'rgba(26,20,16,.06)',
-                color: ollamaStatus.online ? '#16a34a' : 'var(--ink-3)',
+                background: isOnline ? 'rgba(74,222,128,.1)' : 'rgba(26,20,16,.06)',
+                color: isOnline ? '#16a34a' : 'var(--ink-3)',
                 border: '0.5px solid rgba(26,20,16,.08)',
               }}>
-                <div style={{ width:4, height:4, borderRadius:'50%', background: ollamaStatus.online ? '#4ade80' : 'rgba(26,20,16,.2)' }}/>
-                {ollamaStatus.online ? ollamaModel : 'No Ollama'}
+                <div style={{ width:4, height:4, borderRadius:'50%', background: isOnline ? '#4ade80' : 'rgba(26,20,16,.2)' }}/>
+                {activeModel}
               </div>
             </div>
           </div>
@@ -793,31 +803,27 @@ export const AiChat = () => {
                   padding:'2px 8px', borderRadius:999, fontSize:9, fontWeight:700,
                   letterSpacing:'0.12em', textTransform:'uppercase',
                   display:'flex', alignItems:'center', gap:4,
-                  background: sending ? 'rgba(240,107,28,.15)' : ollamaStatus.online ? 'rgba(74,222,128,.1)' : 'rgba(26,20,16,.08)',
-                  color: sending ? 'var(--accent-orange)' : ollamaStatus.online ? '#16a34a' : 'var(--ink-3)',
-                  border: sending ? '0.5px solid rgba(240,107,28,.3)' : ollamaStatus.online ? '0.5px solid rgba(74,222,128,.3)' : '0.5px solid rgba(26,20,16,.12)',
+                  background: sending ? 'rgba(240,107,28,.15)' : isOnline ? 'rgba(74,222,128,.1)' : 'rgba(26,20,16,.08)',
+                  color: sending ? 'var(--accent-orange)' : isOnline ? '#16a34a' : 'var(--ink-3)',
+                  border: sending ? '0.5px solid rgba(240,107,28,.3)' : isOnline ? '0.5px solid rgba(74,222,128,.3)' : '0.5px solid rgba(26,20,16,.12)',
                 }}>
                   <div style={{ width:5, height:5, borderRadius:'50%', flexShrink:0,
-                    background: sending ? 'var(--accent-orange)' : ollamaStatus.online ? '#4ade80' : 'rgba(26,20,16,.22)',
-                    boxShadow: sending ? '0 0 5px var(--accent-orange)' : ollamaStatus.online ? '0 0 5px #4ade80' : 'none',
-                    animation: ollamaStatus.online && !sending ? 'halo-breathe 2.5s ease-in-out infinite' : 'none',
+                    background: sending ? 'var(--accent-orange)' : isOnline ? '#4ade80' : 'rgba(26,20,16,.22)',
+                    boxShadow: sending ? '0 0 5px var(--accent-orange)' : isOnline ? '0 0 5px #4ade80' : 'none',
+                    animation: isOnline && !sending ? 'halo-breathe 2.5s ease-in-out infinite' : 'none',
                   }}/>
-                  {sending ? 'THINKING' : ollamaStatus.online ? 'ONLINE' : 'SLEEPING'}
+                  {sending ? 'THINKING' : isOnline ? 'ONLINE' : 'SLEEPING'}
                 </div>
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:2, flexWrap:'wrap' }}>
-                <div title="Click to switch AI provider" onClick={() => {
-                  const next = aiProvider === 'ollama' ? 'openrouter' : 'ollama';
-                  setAiProvider(next); setAiProviderState(next);
-                  actions.addNotification({ text:`Provider: ${next === 'ollama' ? ollamaModel + ' (local)' : 'OpenRouter cloud'}`, kind:'info' });
-                }} style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 7px', borderRadius:999, fontSize:9, fontWeight:600,
-                  letterSpacing:'0.1em', textTransform:'uppercase', cursor:'pointer',
-                  background: ollamaStatus.online ? 'rgba(74,222,128,.12)' : 'rgba(26,20,16,.07)',
-                  color: ollamaStatus.online ? '#16a34a' : 'var(--ink-3)',
-                  border: ollamaStatus.online ? '0.5px solid rgba(74,222,128,.3)' : '0.5px solid rgba(26,20,16,.1)',
+                <div style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 7px', borderRadius:999, fontSize:9, fontWeight:600,
+                  letterSpacing:'0.1em', textTransform:'uppercase',
+                  background: isOnline ? 'rgba(74,222,128,.12)' : 'rgba(26,20,16,.07)',
+                  color: isOnline ? '#16a34a' : 'var(--ink-3)',
+                  border: isOnline ? '0.5px solid rgba(74,222,128,.3)' : '0.5px solid rgba(26,20,16,.1)',
                 }}>
-                  <div style={{ width:5, height:5, borderRadius:'50%', background: ollamaStatus.online ? '#4ade80' : 'rgba(26,20,16,.2)', boxShadow: ollamaStatus.online ? '0 0 4px #4ade80' : 'none' }}/>
-                  {ollamaStatus.online ? (aiProvider === 'ollama' ? ollamaModel : 'OpenRouter') : 'No Ollama'}
+                  <div style={{ width:5, height:5, borderRadius:'50%', background: isOnline ? '#4ade80' : 'rgba(26,20,16,.2)', boxShadow: isOnline ? '0 0 4px #4ade80' : 'none' }}/>
+                  {activeModel}
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:4, padding:'2px 7px', borderRadius:999, fontSize:9, fontWeight:600,
                   letterSpacing:'0.1em', textTransform:'uppercase',
@@ -875,10 +881,10 @@ export const AiChat = () => {
             <div className="fade-up" style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0, borderRadius:20, overflow:'hidden', background:'rgba(10,7,4,.60)', backdropFilter:'blur(40px) saturate(120%)', WebkitBackdropFilter:'blur(40px) saturate(120%)', border:'0.5px solid rgba(255,255,255,.10)', boxShadow:'0 8px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08), inset 0 -1px 0 rgba(0,0,0,.15)' }}>
               {/* Messages */}
               <div className="hermes-scroll" style={{ flex:1, overflowY:'auto', padding:'24px 22px', display:'flex', flexDirection:'column', gap:16 }}>
-                {messages.length === 0 && !ollamaStatus.online && (
-                  <HermesOfflineScreen model={ollamaModel}/>
+                {messages.length === 0 && !isOnline && (
+                  <HermesOfflineScreen model={activeModel}/>
                 )}
-                {messages.length === 0 && ollamaStatus.online && (
+                {messages.length === 0 && isOnline && (
                   <div style={{ textAlign:'center', padding:'60px 20px' }}>
                     <HermesOrb size={80} thinking={false}/>
                     <div style={{ marginTop:24, fontSize:15, fontWeight:300, letterSpacing:'-0.02em', color:'rgba(255,248,240,.85)' }}>I'm Hermes, your AI. Ask me anything.</div>
@@ -906,10 +912,10 @@ export const AiChat = () => {
               </div>
 
               {/* Offline banner */}
-              {!ollamaStatus.online && messages.length > 0 && (
+              {!isOnline && messages.length > 0 && (
                 <div style={{ padding:'8px 20px', background:'rgba(255,255,255,.04)', borderTop:'0.5px solid rgba(255,255,255,.07)', display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
                   <div style={{ width:6, height:6, borderRadius:'50%', background:'rgba(255,255,255,.2)', flexShrink:0 }}/>
-                  <span style={{ fontSize:11.5, color:'rgba(255,228,200,.45)' }}>Hermes is sleeping — run <code style={{ fontFamily:'monospace', background:'rgba(255,255,255,.07)', padding:'1px 5px', borderRadius:4, color:'rgba(255,248,240,.7)' }}>ollama serve</code> to restore connection</span>
+                  <span style={{ fontSize:11.5, color:'rgba(255,228,200,.45)' }}>Hermes is sleeping — add <code style={{ fontFamily:'monospace', background:'rgba(255,255,255,.07)', padding:'1px 5px', borderRadius:4, color:'rgba(255,248,240,.7)' }}>ANTHROPIC_API_KEY</code> to .env to restore Claude</span>
                 </div>
               )}
 
@@ -924,7 +930,7 @@ export const AiChat = () => {
                   <input
                     ref={inputRef}
                     className="hermes-input"
-                    placeholder={sending ? 'Hermes is thinking…' : ollamaStatus.online ? 'Ask Hermes anything — tasks, notes, inbox, habits, code…' : 'Hermes is sleeping… start Ollama to wake me up'}
+                    placeholder={sending ? 'Hermes is thinking…' : isOnline ? 'Ask Hermes anything — tasks, notes, inbox, habits, code…' : 'Hermes is sleeping… add ANTHROPIC_API_KEY to .env'}
                     value={draft}
                     onChange={e => setDraft(e.target.value)}
                     onKeyDown={e => { if(e.key==='Enter' && !e.shiftKey && !sending) { e.preventDefault(); send(); }}}
@@ -1327,18 +1333,19 @@ export const AiChat = () => {
             <div className="t-cap" style={{ marginBottom:8 }}>⚙️ Hermes Policy</div>
 
             {/* AI Engine selector */}
-            <div style={{ marginBottom:10, padding:'10px 12px', borderRadius:10, background: ollamaStatus.online ? 'rgba(74,222,128,.08)' : 'rgba(255,255,255,.04)', border: ollamaStatus.online ? '0.5px solid rgba(74,222,128,.22)' : '0.5px solid rgba(255,255,255,.08)' }}>
+            <div style={{ marginBottom:10, padding:'10px 12px', borderRadius:10, background: isOnline ? 'rgba(74,222,128,.08)' : 'rgba(255,255,255,.04)', border: isOnline ? '0.5px solid rgba(74,222,128,.22)' : '0.5px solid rgba(255,255,255,.08)' }}>
               <div style={{ fontSize:11, fontWeight:600, color:'var(--ink-2)', marginBottom:6 }}>AI Engine</div>
               <div style={{ display:'flex', gap:6 }}>
                 {[
+                  { id:'claude', label: claudeOnline ? 'Claude Sonnet' : 'Claude (add key)', disabled: false },
                   { id:'ollama', label: ollamaStatus.online ? ollamaModel : 'Ollama (offline)', disabled: !ollamaStatus.online },
                   { id:'openrouter', label:'OpenRouter', disabled: false },
                 ].map(opt => (
                   <button key={opt.id} type="button" disabled={opt.disabled} onClick={() => { setAiProvider(opt.id); setAiProviderState(opt.id); }} style={{
                     flex:1, padding:'5px 0', borderRadius:8, fontSize:10.5, fontWeight:600, cursor: opt.disabled ? 'not-allowed' : 'pointer',
-                    background: aiProvider === opt.id ? 'linear-gradient(135deg,#4ade80,#16a34a)' : 'rgba(255,255,255,.07)',
-                    color: aiProvider === opt.id ? '#fff' : opt.disabled ? 'rgba(255,228,200,.3)' : 'rgba(255,238,218,.65)',
-                    border: aiProvider === opt.id ? '0.5px solid rgba(74,222,128,.4)' : '0.5px solid rgba(255,255,255,.1)',
+                    background: opt.id === 'claude' && claudeOnline ? 'linear-gradient(135deg,#f5a524,#f06b1c)' : aiProvider === opt.id ? 'linear-gradient(135deg,#4ade80,#16a34a)' : 'rgba(255,255,255,.07)',
+                    color: (opt.id === 'claude' && claudeOnline) || aiProvider === opt.id ? '#fff' : opt.disabled ? 'rgba(255,228,200,.3)' : 'rgba(255,238,218,.65)',
+                    border: opt.id === 'claude' && claudeOnline ? '0.5px solid rgba(245,165,36,.4)' : aiProvider === opt.id ? '0.5px solid rgba(74,222,128,.4)' : '0.5px solid rgba(255,255,255,.1)',
                     opacity: opt.disabled ? 0.45 : 1,
                     transition:'all 160ms',
                   }}>{opt.label}</button>

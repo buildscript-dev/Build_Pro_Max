@@ -1,19 +1,20 @@
 import { getMemoryProfile } from './hermesMemory.js';
 import { callOllama, getOllamaModel } from './ollama.js';
+import { callClaude } from './claude.js';
 import { getSupportedApps } from './webActions.js';
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
 const FALLBACK_MODEL = 'mistralai/mistral-7b-instruct:free';
 
 const SLEEP_MESSAGES = [
-  "I'm sleeping right now... come back later 😴",
+  "I'm sleeping right now... come back later.",
   "Exhausted. My neural networks are at rest. Try again soon.",
-  "System hibernation mode — start Ollama to wake me up.",
-  "I'm dreaming. Can't think without mistral running locally.",
-  "Offline and resting. Run `ollama serve` in your terminal.",
+  "System hibernation mode — no AI engine available.",
+  "Offline and resting. Check your API configuration.",
   "Taking a nap. My consciousness is temporarily suspended.",
-  "Not reachable right now. I'll be back when Ollama wakes up.",
+  "Not reachable right now. I'll be back when a model is online.",
   "Disconnected from my brain. Give me a moment to come back.",
+  "No AI engine found. Add your Anthropic API key or start Ollama.",
 ];
 
 export function getRandomSleepMessage() {
@@ -124,18 +125,25 @@ On mobile the action opens the native app; on desktop it opens a new browser tab
 Current context: ${contextStr}${extra ? '\n' + extra : ''}`.trim();
 }
 
-// Unified AI caller: Ollama (local, primary) → OpenRouter (cloud, fallback)
+// Unified AI caller: Claude Sonnet (primary) → Ollama (local fallback) → OpenRouter (cloud fallback)
 async function callAI(messages, maxTokens = 400) {
+  // Primary: Claude Sonnet via server-side proxy
+  const claude = await callClaude(messages, maxTokens);
+  if (claude) return claude;
+
+  // Fallback 1: Ollama local model
   const preferLocal = localStorage.getItem('ai_provider') !== 'openrouter';
   if (preferLocal) {
     const local = await callOllama(messages, maxTokens);
     if (local) return local;
   }
+
+  // Fallback 2: OpenRouter cloud
   return callOpenRouter(messages, maxTokens);
 }
 
 export function getActiveProvider() {
-  return localStorage.getItem('ai_provider') !== 'openrouter' ? 'ollama' : 'openrouter';
+  return 'claude';
 }
 
 export function setAiProvider(provider) {
