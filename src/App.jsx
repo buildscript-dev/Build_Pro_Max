@@ -7,7 +7,6 @@ import { AiOrb } from './components/ui/Icons';
 import { Dashboard } from './screens/Dashboard';
 import { Auth } from './screens/Auth';
 import { logout } from './store/auth';
-import { AmbientVideo } from './components/effects/AmbientVideo';
 import { PageTransition } from './components/effects/PageTransition';
 import { FocusPanel } from './components/focus/FocusPanel'
 

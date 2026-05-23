@@ -39,12 +39,12 @@ const SideRail = ({ active, onSelect, onOpenCmdK, onOpenFocus, focusMode, hasNot
     position: "fixed", left: 16, top: "50%", transform: "translateY(-50%)",
     zIndex: 50, display: "flex", flexDirection: "column", gap: 4,
     padding: 8,
-    background: "rgba(255, 252, 244, 0.55)",
-    backdropFilter: "blur(28px) saturate(180%)",
-    WebkitBackdropFilter: "blur(28px) saturate(180%)",
-    border: "0.5px solid rgba(255,255,255,.7)",
+    background: "rgba(22, 22, 22, 0.78)",
+    backdropFilter: "blur(28px) saturate(160%)",
+    WebkitBackdropFilter: "blur(28px) saturate(160%)",
+    border: "0.5px solid rgba(255,255,255,.12)",
     borderRadius: 18,
-    boxShadow: "0 2px 1px rgba(255,255,255,.9) inset, 0 12px 40px -10px rgba(46,30,12,.25)",
+    boxShadow: "0 1px 0 rgba(255,255,255,.08) inset, 0 12px 40px -10px rgba(0,0,0,.55)",
   }}>
     {DOCK_ITEMS.map((item) => {
       const isActive = active === item.id;
@@ -74,11 +74,12 @@ const SideRail = ({ active, onSelect, onOpenCmdK, onOpenFocus, focusMode, hasNot
     })}
     <div style={{ height: 1, background: "rgba(26,20,16,.10)", margin: "4px 6px" }} />
     <FocusToggle focusMode={focusMode} onClick={onOpenFocus} />
-    <button onClick={onOpenCmdK} aria-label="Open AI command bar" style={{
+    <button onClick={onOpenCmdK} aria-label="Open AI command bar (⌘K)" style={{
       width: 40, height: 40, borderRadius: 10,
-      background: "rgba(26,20,16,.86)", color: "#fff8e8",
+      background: "rgba(240,107,28,0.18)", color: "var(--accent-orange)",
+      border: "0.5px solid rgba(240,107,28,0.3)",
       display: "flex", alignItems: "center", justifyContent: "center",
-      fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 500,
+      fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600,
     }}>⌘K</button>
   </div>
 );
@@ -145,12 +146,14 @@ export const TopBar = ({ user, today, onOpenCmdK, variant = "dock", active, onSe
       {showInlineNav && (
         <div style={{ display: "flex", gap: 2, marginLeft: 12 }}>
           {DOCK_ITEMS.filter((d) => !d.isAi).slice(0, 6).map((item) => (
-            <button key={item.id} onClick={() => onSelect(item.id)} style={{
-              padding: "6px 12px", borderRadius: 999, fontSize: 12.5, fontWeight: 500,
-              color: active === item.id ? "var(--ink-1)" : "var(--ink-3)",
-              background: active === item.id ? "rgba(255,252,244,.7)" : "transparent",
-              boxShadow: active === item.id ? "0 1px 2px rgba(46,30,12,.08), 0 1px 0 rgba(255,255,255,.7) inset" : "none",
-            }}>{item.label}</button>
+            <button key={item.id} onClick={() => onSelect(item.id)}
+              aria-label={item.label} aria-current={active === item.id ? "page" : undefined}
+              style={{
+                padding: "6px 12px", borderRadius: 999, fontSize: 12.5, fontWeight: 500,
+                color: active === item.id ? "var(--ink-1)" : "var(--ink-3)",
+                background: active === item.id ? "rgba(255,255,255,.10)" : "transparent",
+                boxShadow: active === item.id ? "0 1px 0 rgba(255,255,255,.08) inset" : "none",
+              }}>{item.label}</button>
           ))}
         </div>
       )}
@@ -199,11 +202,12 @@ export const TopBar = ({ user, today, onOpenCmdK, variant = "dock", active, onSe
           <div style={{
             position: "absolute", top: "100%", right: 0, marginTop: 8,
             width: 320, maxHeight: 360,
-            background: "rgba(255,252,244,.95)",
-            backdropFilter: "blur(24px)",
-            border: "0.5px solid rgba(255,255,255,.85)",
+            background: "rgba(18,18,18,0.96)",
+            backdropFilter: "blur(28px) saturate(160%)",
+            WebkitBackdropFilter: "blur(28px) saturate(160%)",
+            border: "0.5px solid rgba(255,255,255,.12)",
             borderRadius: 16,
-            boxShadow: "0 24px 60px -12px rgba(46,30,12,.35)",
+            boxShadow: "0 1px 0 rgba(255,255,255,.08) inset, 0 24px 60px -12px rgba(0,0,0,.60)",
             overflow: "hidden", zIndex: 60,
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "0.5px solid var(--ink-line)" }}>
