@@ -9,7 +9,7 @@ import {
 } from '../services/hermesMemory';
 import { checkOllamaStatus, getOllamaModel, setOllamaModel } from '../services/ollama';
 import { checkClaudeStatus } from '../services/claude';
-import { getActiveProvider, setAiProvider } from '../services/ai';
+import { getActiveProvider, setAiProvider, setModelPreference } from '../services/ai';
 import { openApp } from '../services/webActions';
 
 /* ─── Hermes Pulsing SVG Orb ─────────────────────────────────── */
@@ -405,6 +405,7 @@ export const AiChat = () => {
   const [memoryDraft, setMemoryDraft]       = useState('');
   const [obsidianApiKey, setObsidianApiKey] = useState(() => localStorage.getItem('obsidian_api_key') || '');
   const [obsidianVaultPath, setObsidianVaultPath] = useState(() => localStorage.getItem('obsidian_vault_path') || 'Hermes');
+  const [showModelPicker, setShowModelPicker] = useState(false);
 
   /* ── derived ── */
   const isOnline    = claudeOnline || ollamaStatus.online;
@@ -524,10 +525,42 @@ export const AiChat = () => {
     });
   }, []);
 
+  /* ── model switch ── */
+  const handleModelSwitch = useCallback((modelId) => {
+    const labels = {
+      claude:      'Claude Sonnet 4.5 (Anthropic)',
+      ollama:      ollamaStatus.models?.[0] || 'Ollama local',
+      openrouter:  'OpenRouter · Mistral-7B',
+      auto:        'Auto (best available)',
+    };
+    setModelPreference(modelId);
+    setAiProviderState(modelId);
+    setShowModelPicker(false);
+    setDraft('');
+    const label = labels[modelId] || modelId;
+    actions.addChatMessage({ role:'system', text:`✓ Switched to ${label}`, time: Date.now() });
+    const now = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    setLogs(prev => [...prev.slice(-18), { kind:'HERMES', msg:`Model preference set: ${label}`, ts: now }]);
+  }, [ollamaStatus, actions]);
+
   /* ── send message ── */
   const send = useCallback(async (text) => {
     const msg = (text || draft).trim();
     if (!msg || sending) return;
+
+    // Handle /model slash command
+    if (msg.startsWith('/model')) {
+      const parts = msg.split(/\s+/);
+      const modelArg = parts[1]?.toLowerCase();
+      if (modelArg && ['claude', 'ollama', 'openrouter', 'auto'].includes(modelArg)) {
+        handleModelSwitch(modelArg);
+      } else {
+        setDraft('');
+        setShowModelPicker(true);
+      }
+      return;
+    }
+
     setDraft('');
     setSending(true);
     actions.addChatMessage({ role:'user', text:msg, time: Date.now() });
@@ -920,7 +953,56 @@ export const AiChat = () => {
               )}
 
               {/* Input */}
-              <div style={{ padding: isMobile ? '8px 10px' : '12px 16px', borderTop:'0.5px solid rgba(255,255,255,.07)', background:'rgba(8,5,3,.50)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)' }}>
+              <div style={{ padding: isMobile ? '8px 10px' : '12px 16px', borderTop:'0.5px solid rgba(255,255,255,.07)', background:'rgba(8,5,3,.50)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', position:'relative' }}>
+                {/* /model picker panel */}
+                {showModelPicker && (
+                  <div style={{
+                    position:'absolute', bottom:'calc(100% + 8px)', left: isMobile ? 10 : 16, right: isMobile ? 10 : 16,
+                    borderRadius:16, overflow:'hidden',
+                    background:'rgba(14,10,8,.96)', backdropFilter:'blur(32px)', WebkitBackdropFilter:'blur(32px)',
+                    border:'0.5px solid rgba(255,255,255,.18)',
+                    boxShadow:'0 -8px 40px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.10)',
+                    zIndex:100,
+                  }}>
+                    <div style={{ padding:'12px 16px 8px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'0.5px solid rgba(255,255,255,.07)' }}>
+                      <span style={{ fontSize:11, fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color:'var(--ink-3)' }}>Select AI Model</span>
+                      <button type="button" onClick={() => setShowModelPicker(false)} style={{ fontSize:14, color:'var(--ink-3)', background:'none', border:'none', cursor:'pointer', lineHeight:1 }}>✕</button>
+                    </div>
+                    {[
+                      { id:'auto',       icon:'✦', label:'Auto',              sub:'Best available engine, always',    ok: true,                badge:'DEFAULT',   badgeColor:'#f5a524' },
+                      { id:'claude',     icon:'◆', label:'Claude Sonnet 4.5', sub:'Anthropic · Highest quality',      ok: claudeOnline,         badge: claudeOnline ? 'LIVE' : 'ADD KEY', badgeColor: claudeOnline ? '#4ade80' : '#f59e0b' },
+                      { id:'ollama',     icon:'◉', label: ollamaStatus.models?.[0] || 'Ollama',  sub:'Local · Private · Fast', ok: ollamaStatus.online,  badge: ollamaStatus.online ? 'LIVE' : 'OFFLINE', badgeColor: ollamaStatus.online ? '#4ade80' : '#6b7280' },
+                      { id:'openrouter', icon:'◈', label:'OpenRouter',        sub:'Cloud · Mistral-7B · Free tier',   ok: true,                 badge:'CLOUD',    badgeColor:'#60a5fa' },
+                    ].map(opt => {
+                      const isActive = aiProvider === opt.id || (opt.id === 'auto' && (aiProvider === 'claude' || aiProvider === 'auto'));
+                      return (
+                        <button key={opt.id} type="button" onClick={() => handleModelSwitch(opt.id)} style={{
+                          width:'100%', display:'flex', alignItems:'center', gap:12, padding:'11px 16px',
+                          background: isActive ? 'rgba(240,107,28,.12)' : 'transparent',
+                          border:'none', borderBottom:'0.5px solid rgba(255,255,255,.05)',
+                          cursor:'pointer', textAlign:'left', transition:'background 120ms',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,.07)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = isActive ? 'rgba(240,107,28,.12)' : 'transparent'; }}
+                        >
+                          <span style={{ fontSize:16, flexShrink:0, opacity: opt.ok ? 1 : 0.35 }}>{opt.icon}</span>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:12.5, fontWeight:600, color: opt.ok ? 'var(--ink-1)' : 'var(--ink-3)', display:'flex', alignItems:'center', gap:6 }}>
+                              {opt.label}
+                              {isActive && <span style={{ fontSize:9, fontWeight:700, letterSpacing:'0.08em', color:'var(--accent-orange)' }}>● ACTIVE</span>}
+                            </div>
+                            <div style={{ fontSize:11, color:'var(--ink-3)', marginTop:1 }}>{opt.sub}</div>
+                          </div>
+                          <span style={{ fontSize:9, fontWeight:700, letterSpacing:'0.09em', padding:'2px 7px', borderRadius:5, background:`${opt.badgeColor}22`, color:opt.badgeColor, flexShrink:0 }}>{opt.badge}</span>
+                        </button>
+                      );
+                    })}
+                    <div style={{ padding:'8px 16px', fontSize:10.5, color:'rgba(255,228,200,.35)' }}>
+                      Tip: type <code style={{ background:'rgba(255,255,255,.07)', padding:'1px 5px', borderRadius:4, color:'rgba(255,248,240,.6)' }}>/model claude</code> to switch instantly
+                    </div>
+                  </div>
+                )}
+
                 {voiceTranscript && (
                   <div style={{ marginBottom:8, padding:'6px 10px', borderRadius:8, background:'rgba(240,107,28,.08)', fontSize:12, color:'var(--accent-orange)', fontStyle:'italic' }}>
                     🎙️ {voiceTranscript}
@@ -930,10 +1012,18 @@ export const AiChat = () => {
                   <input
                     ref={inputRef}
                     className="hermes-input"
-                    placeholder={sending ? 'Hermes is thinking…' : isOnline ? 'Ask Hermes anything — tasks, notes, inbox, habits, code…' : 'Hermes is sleeping… add ANTHROPIC_API_KEY to .env'}
+                    placeholder={sending ? 'Hermes is thinking…' : isOnline ? 'Ask anything… or type /model to switch AI' : 'Hermes is sleeping… add ANTHROPIC_API_KEY to .env'}
                     value={draft}
-                    onChange={e => setDraft(e.target.value)}
-                    onKeyDown={e => { if(e.key==='Enter' && !e.shiftKey && !sending) { e.preventDefault(); send(); }}}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setDraft(val);
+                      if (val === '/model' || val.startsWith('/model ')) setShowModelPicker(true);
+                      else if (showModelPicker && !val.startsWith('/model')) setShowModelPicker(false);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Escape') { setShowModelPicker(false); }
+                      if (e.key === 'Enter' && !e.shiftKey && !sending) { e.preventDefault(); send(); }
+                    }}
                     disabled={sending}
                   />
                   {/* Voice button */}
@@ -956,11 +1046,24 @@ export const AiChat = () => {
                 </div>
                 {!isMobile && (
                   <div className="hermes-suggestions" style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:10 }}>
-                    {['What are my P0 tasks?','Create a note about my goals','Plan my day','Check my habits','Build status'].map(s => (
-                      <button key={s} type="button" onClick={() => { setDraft(s); inputRef.current?.focus(); }}
-                        style={{ padding:'4px 10px', borderRadius:20, fontSize:11.5, color:'var(--ink-2)', background:'rgba(26,20,16,.05)', border:'0.5px solid rgba(26,20,16,.08)', cursor:'pointer', transition:'all 120ms' }}
-                        onMouseEnter={e => { e.currentTarget.style.background='rgba(245,165,36,.12)'; e.currentTarget.style.color='var(--accent-orange)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background='rgba(26,20,16,.05)'; e.currentTarget.style.color='var(--ink-2)'; }}
+                    {['What are my P0 tasks?','Plan my day','Check my habits','/model'].map(s => (
+                      <button key={s} type="button" onClick={() => {
+                        if (s === '/model') { setShowModelPicker(true); setDraft('/model'); }
+                        else { setDraft(s); inputRef.current?.focus(); }
+                      }}
+                        style={{
+                          padding:'4px 10px', borderRadius:20, fontSize:11.5, cursor:'pointer', transition:'all 120ms',
+                          color: s === '/model' ? 'var(--accent-orange)' : 'var(--ink-2)',
+                          background: s === '/model' ? 'rgba(245,165,36,.10)' : 'rgba(26,20,16,.05)',
+                          border: s === '/model' ? '0.5px solid rgba(245,165,36,.25)' : '0.5px solid rgba(26,20,16,.08)',
+                          fontFamily: s === '/model' ? 'var(--font-mono)' : 'inherit',
+                          fontWeight: s === '/model' ? 600 : 400,
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background='rgba(245,165,36,.18)'; e.currentTarget.style.color='var(--accent-orange)'; }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = s === '/model' ? 'rgba(245,165,36,.10)' : 'rgba(26,20,16,.05)';
+                          e.currentTarget.style.color = s === '/model' ? 'var(--accent-orange)' : 'var(--ink-2)';
+                        }}
                       >{s}</button>
                     ))}
                   </div>
@@ -1332,30 +1435,23 @@ export const AiChat = () => {
           <div style={{ padding:'16px', borderRadius:18, background:'rgba(10,7,4,.65)', border:'0.5px solid rgba(255,255,255,.10)', backdropFilter:'blur(32px)', WebkitBackdropFilter:'blur(32px)', boxShadow:'0 8px 32px rgba(0,0,0,.40), inset 0 1px 0 rgba(255,255,255,.07)' }}>
             <div className="t-cap" style={{ marginBottom:8 }}>⚙️ Hermes Policy</div>
 
-            {/* AI Engine selector */}
+            {/* AI Engine status — no manual selector, auto-picks best */}
             <div style={{ marginBottom:10, padding:'10px 12px', borderRadius:10, background: isOnline ? 'rgba(74,222,128,.08)' : 'rgba(255,255,255,.04)', border: isOnline ? '0.5px solid rgba(74,222,128,.22)' : '0.5px solid rgba(255,255,255,.08)' }}>
-              <div style={{ fontSize:11, fontWeight:600, color:'var(--ink-2)', marginBottom:6 }}>AI Engine</div>
-              <div style={{ display:'flex', gap:6 }}>
-                {[
-                  { id:'claude', label: claudeOnline ? 'Claude Sonnet' : 'Claude (add key)', disabled: false },
-                  { id:'ollama', label: ollamaStatus.online ? ollamaModel : 'Ollama (offline)', disabled: !ollamaStatus.online },
-                  { id:'openrouter', label:'OpenRouter', disabled: false },
-                ].map(opt => (
-                  <button key={opt.id} type="button" disabled={opt.disabled} onClick={() => { setAiProvider(opt.id); setAiProviderState(opt.id); }} style={{
-                    flex:1, padding:'5px 0', borderRadius:8, fontSize:10.5, fontWeight:600, cursor: opt.disabled ? 'not-allowed' : 'pointer',
-                    background: opt.id === 'claude' && claudeOnline ? 'linear-gradient(135deg,#f5a524,#f06b1c)' : aiProvider === opt.id ? 'linear-gradient(135deg,#4ade80,#16a34a)' : 'rgba(255,255,255,.07)',
-                    color: (opt.id === 'claude' && claudeOnline) || aiProvider === opt.id ? '#fff' : opt.disabled ? 'rgba(255,228,200,.3)' : 'rgba(255,238,218,.65)',
-                    border: opt.id === 'claude' && claudeOnline ? '0.5px solid rgba(245,165,36,.4)' : aiProvider === opt.id ? '0.5px solid rgba(74,222,128,.4)' : '0.5px solid rgba(255,255,255,.1)',
-                    opacity: opt.disabled ? 0.45 : 1,
-                    transition:'all 160ms',
-                  }}>{opt.label}</button>
-                ))}
+              <div style={{ fontSize:11, fontWeight:600, color:'var(--ink-2)', marginBottom:8 }}>AI Engine</div>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                  <div style={{ width:7, height:7, borderRadius:'50%', background: isOnline ? '#4ade80' : 'rgba(255,255,255,.2)', boxShadow: isOnline ? '0 0 6px #4ade80' : 'none' }}/>
+                  <span style={{ fontSize:12.5, fontWeight:600, color:'var(--ink-1)' }}>{activeModel}</span>
+                </div>
+                <button type="button" onClick={() => { setShowModelPicker(true); setActiveTab('chat'); }} style={{
+                  fontSize:10, fontWeight:700, letterSpacing:'0.08em', fontFamily:'var(--font-mono)',
+                  padding:'3px 9px', borderRadius:6, border:'0.5px solid rgba(245,165,36,.35)',
+                  background:'rgba(245,165,36,.12)', color:'var(--accent-orange)', cursor:'pointer',
+                }}>/ model</button>
               </div>
-              {ollamaStatus.online && ollamaStatus.models.length > 0 && (
-                <select value={ollamaModel} onChange={e => { setOllamaModel(e.target.value); setOllamaModelState(e.target.value); }} style={{ marginTop:8, width:'100%', padding:'5px 8px', borderRadius:7, fontSize:11, background:'rgba(255,255,255,.08)', border:'0.5px solid rgba(255,255,255,.14)', color:'rgba(255,248,240,.88)', cursor:'pointer' }}>
-                  {ollamaStatus.models.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              )}
+              <div style={{ marginTop:6, fontSize:10.5, color:'var(--ink-3)' }}>
+                Auto-selects best available · Type <code style={{ background:'rgba(255,255,255,.06)', padding:'0 4px', borderRadius:3 }}>/model</code> in chat to switch
+              </div>
             </div>
 
             <GlassToggle on={personality.autoPlan!==false} onChange={v=>updatePersonality('autoPlan',v)} label="Auto-Plan" sub="Reschedule slipped tasks"/>

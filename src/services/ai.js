@@ -125,29 +125,35 @@ On mobile the action opens the native app; on desktop it opens a new browser tab
 Current context: ${contextStr}${extra ? '\n' + extra : ''}`.trim();
 }
 
-// Unified AI caller: Claude Sonnet (primary) → Ollama (local fallback) → OpenRouter (cloud fallback)
+// Unified AI caller — auto-selects best available engine, respects user preference
 async function callAI(messages, maxTokens = 400) {
-  // Primary: Claude Sonnet via server-side proxy
-  const claude = await callClaude(messages, maxTokens);
-  if (claude) return claude;
+  const pref = localStorage.getItem('hermes_model_pref') || 'auto';
 
-  // Fallback 1: Ollama local model
-  const preferLocal = localStorage.getItem('ai_provider') !== 'openrouter';
-  if (preferLocal) {
-    const local = await callOllama(messages, maxTokens);
-    if (local) return local;
+  // Build ordered list: preferred engine first, then remaining fallbacks
+  const order = pref === 'ollama'     ? ['ollama',     'claude', 'openrouter']
+              : pref === 'openrouter' ? ['openrouter', 'claude', 'ollama']
+              :                         ['claude',      'ollama', 'openrouter'];
+
+  for (const engine of order) {
+    let result = null;
+    if (engine === 'claude')     result = await callClaude(messages, maxTokens);
+    if (engine === 'ollama')     result = await callOllama(messages, maxTokens);
+    if (engine === 'openrouter') result = await callOpenRouter(messages, maxTokens);
+    if (result) return result;
   }
-
-  // Fallback 2: OpenRouter cloud
-  return callOpenRouter(messages, maxTokens);
+  return null;
 }
 
 export function getActiveProvider() {
-  return 'claude';
+  return localStorage.getItem('hermes_model_pref') || 'auto';
+}
+
+export function setModelPreference(pref) {
+  localStorage.setItem('hermes_model_pref', pref);
 }
 
 export function setAiProvider(provider) {
-  localStorage.setItem('ai_provider', provider);
+  localStorage.setItem('hermes_model_pref', provider);
 }
 
 async function callOpenRouter(messages, maxTokens = 300) {
