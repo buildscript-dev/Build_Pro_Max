@@ -125,14 +125,43 @@ On mobile the action opens the native app; on desktop it opens a new browser tab
 Current context: ${contextStr}${extra ? '\n' + extra : ''}`.trim();
 }
 
-// Unified AI caller — auto-selects best available engine, respects user preference
+async function callHermesLocal(messages, maxTokens = 400) {
+  try {
+    const systemMsg = messages.find(m => m.role === 'system');
+    const chatMsgs = messages.filter(m => m.role !== 'system');
+    const historyText = chatMsgs.slice(0, -1)
+      .map(m => `${m.role === 'user' ? 'User' : 'Hermes'}: ${(m.content || '').slice(0, 300)}`)
+      .join('\n');
+    const lastMsg = chatMsgs[chatMsgs.length - 1]?.content || '';
+    const context = systemMsg?.content || '';
+
+    const res = await fetch('/api/hermes-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userMessage: lastMsg, context, historyText }),
+      signal: AbortSignal.timeout(55000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.response || null;
+  } catch {
+    return null;
+  }
+}
+
+// Unified AI caller — Hermes local first, then fallbacks
 async function callAI(messages, maxTokens = 400) {
   const pref = localStorage.getItem('hermes_model_pref') || 'auto';
 
-  // Build ordered list: preferred engine first, then remaining fallbacks
+  if (pref === 'hermes' || pref === 'auto') {
+    const result = await callHermesLocal(messages, maxTokens);
+    if (result) return result;
+  }
+
   const order = pref === 'ollama'     ? ['ollama',     'claude', 'openrouter']
               : pref === 'openrouter' ? ['openrouter', 'claude', 'ollama']
-              :                         ['claude',      'ollama', 'openrouter'];
+              : pref === 'hermes'     ? ['ollama', 'openrouter']
+              :                         ['claude',  'ollama',  'openrouter'];
 
   for (const engine of order) {
     let result = null;

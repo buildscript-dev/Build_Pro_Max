@@ -7,6 +7,30 @@ import https from 'https';
 const execAsync = util.promisify(exec);
 
 const CLAUDE_MODEL = 'claude-sonnet-4-5';
+const HERMES_BIN = '/home/build_script/.hermes/hermes-agent/venv/bin/hermes';
+
+async function callHermesCLI(prompt) {
+  const escaped = prompt.replace(/'/g, `'\\''`).replace(/\$/g, '\\$').replace(/`/g, '\\`');
+  const cmd = `${HERMES_BIN} -z '${escaped}'`;
+  try {
+    const { stdout } = await execAsync(cmd, {
+      timeout: 50000,
+      env: { ...process.env, HOME: '/home/build_script', HERMES_HOME: '/home/build_script/.hermes' },
+    });
+    return (stdout || '').trim() || null;
+  } catch (e) {
+    return (e.stdout || '').trim() || null;
+  }
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', c => { body += c.toString(); });
+    req.on('end', () => { try { resolve(JSON.parse(body)); } catch { reject(new Error('Invalid JSON')); } });
+    req.on('error', reject);
+  });
+}
 
 function proxyToAnthropic(reqBody, apiKey) {
   return new Promise((resolve, reject) => {
@@ -39,6 +63,33 @@ export default function hermesAgentPlugin() {
     name: 'vite-plugin-hermes',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+
+        // ── Hermes local AI status ─────────────────────────────────
+        if (req.url === '/api/hermes-chat/status') {
+          res.setHeader('Content-Type', 'application/json');
+          const ok = await fs.access(HERMES_BIN).then(() => true).catch(() => false);
+          return res.end(JSON.stringify({ online: ok, model: 'deepseek-v4-flash-free', provider: 'OpenCode Zen' }));
+        }
+
+        // ── Hermes local AI chat ─────────────────────────────────────
+        if (req.url === '/api/hermes-chat' && req.method === 'POST') {
+          res.setHeader('Content-Type', 'application/json');
+          try {
+            const { userMessage, context, historyText } = await readBody(req);
+            const systemContext = context ? `[APP CONTEXT]\n${context}\n\n` : '';
+            const history = historyText ? `[RECENT CONVERSATION]\n${historyText}\n\n` : '';
+            const fullPrompt = `${systemContext}${history}[USER MESSAGE]\n${userMessage}\n\nRespond as Hermes, a personal AI assistant. Be concise, helpful, and direct. Max 3 sentences unless a detailed answer is needed.`;
+            const response = await callHermesCLI(fullPrompt);
+            if (!response) {
+              res.statusCode = 503;
+              return res.end(JSON.stringify({ error: 'Hermes agent offline or timed out' }));
+            }
+            return res.end(JSON.stringify({ response, model: 'deepseek-v4-flash-free', provider: 'OpenCode Zen' }));
+          } catch (e) {
+            res.statusCode = 500;
+            return res.end(JSON.stringify({ error: e.message }));
+          }
+        }
 
         // ── Claude status check ─────────────────────────────────────
         if (req.url === '/api/claude/status') {

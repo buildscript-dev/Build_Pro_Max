@@ -11,6 +11,7 @@ import { checkOllamaStatus, getOllamaModel, setOllamaModel } from '../services/o
 import { checkClaudeStatus } from '../services/claude';
 import { getActiveProvider, setAiProvider, setModelPreference } from '../services/ai';
 import { openApp } from '../services/webActions';
+import { checkHermesLocalStatus, parseNameChangeCommand, parseSummaryCommand, buildHermesContext } from '../services/hermesLocal';
 
 /* ─── Hermes Pulsing SVG Orb ─────────────────────────────────── */
 const HermesOrb = ({ thinking = false, size = 120 }) => {
@@ -398,6 +399,8 @@ export const AiChat = () => {
   const [obsidianOnline, setObsidianOnline] = useState(false);
   const [claudeOnline, setClaudeOnline]     = useState(false);
   const [ollamaStatus, setOllamaStatus]     = useState({ online: false, models: [], hasGemma3: false });
+  const [hermesLocalOnline, setHermesLocalOnline] = useState(false);
+  const [hermesLocalModel, setHermesLocalModel]   = useState('deepseek-v4-flash-free');
   const [ollamaModel, setOllamaModelState]  = useState(() => getOllamaModel());
   const [aiProvider, setAiProviderState]    = useState(() => getActiveProvider());
   const [memoryProfile, setMemProfileState] = useState(() => getMemoryProfile());
@@ -408,8 +411,8 @@ export const AiChat = () => {
   const [showModelPicker, setShowModelPicker] = useState(false);
 
   /* ── derived ── */
-  const isOnline    = claudeOnline || ollamaStatus.online;
-  const activeModel = claudeOnline ? 'Claude Sonnet' : (ollamaStatus.online ? ollamaModel : 'No engine');
+  const isOnline    = hermesLocalOnline || claudeOnline || ollamaStatus.online;
+  const activeModel = hermesLocalOnline ? `Hermes · ${hermesLocalModel}` : claudeOnline ? 'Claude Sonnet' : (ollamaStatus.online ? ollamaModel : 'No engine');
   const openTasks   = useMemo(() => tasks.filter(t => t.status !== 'done').length, [tasks]);
   const todayTasks  = useMemo(() => tasks.filter(t => /today/i.test(t.due||'') && t.status!=='done').length, [tasks]);
   const p0Tasks     = useMemo(() => tasks.filter(t => t.priority==='P0' && t.status!=='done').length, [tasks]);
@@ -468,31 +471,37 @@ export const AiChat = () => {
     }
   }, [claudeOnline, ollamaStatus.online]);
 
-  /* ── Claude + Obsidian + Ollama status polling ── */
+  /* ── Claude + Obsidian + Ollama + Hermes status polling ── */
   useEffect(() => {
     (async () => {
-      const [{ online: obsOnline }, ollama, claude] = await Promise.all([
+      const [{ online: obsOnline }, ollama, claude, hermesStatus] = await Promise.all([
         checkObsidianStatus(),
         checkOllamaStatus(),
         checkClaudeStatus(),
+        checkHermesLocalStatus(),
       ]);
       setObsidianOnline(obsOnline);
       setOllamaStatus(ollama);
       setClaudeOnline(claude.online);
+      setHermesLocalOnline(hermesStatus.online);
+      if (hermesStatus.model) setHermesLocalModel(hermesStatus.model);
       if (obsOnline) {
         const pulled = await syncFromObsidian();
         if (pulled) setMemProfileState(pulled);
       }
     })();
     const interval = setInterval(async () => {
-      const [{ online: obsOnline }, ollama, claude] = await Promise.all([
+      const [{ online: obsOnline }, ollama, claude, hermesStatus] = await Promise.all([
         checkObsidianStatus(),
         checkOllamaStatus(),
         checkClaudeStatus(),
+        checkHermesLocalStatus(),
       ]);
       setObsidianOnline(obsOnline);
       setOllamaStatus(ollama);
       setClaudeOnline(claude.online);
+      setHermesLocalOnline(hermesStatus.online);
+      if (hermesStatus.model) setHermesLocalModel(hermesStatus.model);
     }, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -558,6 +567,41 @@ export const AiChat = () => {
         setDraft('');
         setShowModelPicker(true);
       }
+      return;
+    }
+
+    // ── Name change command ─────────────────────────────────────
+    const newName = parseNameChangeCommand(msg);
+    if (newName) {
+      setDraft('');
+      actions.addChatMessage({ role:'user', text:msg, time: Date.now() });
+      actions.updateUser({ name: newName, avatar: newName.slice(0,2).toUpperCase(), handle: '@' + newName.toLowerCase().replace(/\s+/g,'') });
+      actions.addChatMessage({ role:'ai', text:`Done — your name is now **${newName}**. I've updated it everywhere.`, time: Date.now() });
+      actions.addNotification({ text: `Name updated to ${newName}`, kind: 'info' });
+      return;
+    }
+
+    // ── Summary commands ─────────────────────────────────────────
+    const summaryType = parseSummaryCommand(msg);
+    if (summaryType) {
+      setDraft('');
+      setSending(true);
+      actions.addChatMessage({ role:'user', text:msg, time: Date.now() });
+      const snap = store.getSnapshot();
+      const ctx = buildHermesContext(snap);
+      const summaryPrompt = summaryType === 'notes'
+        ? `Summarize the user's notes in 3–5 bullet points. Be specific and useful.\n\nAPP CONTEXT:\n${ctx}`
+        : summaryType === 'planner'
+        ? `Summarize the user's open tasks and schedule. Highlight priorities and what to tackle first.\n\nAPP CONTEXT:\n${ctx}`
+        : `Give a concise daily brief: key tasks, notes highlights, and what to focus on today.\n\nAPP CONTEXT:\n${ctx}`;
+      try {
+        const { generateAiResponse } = await import('../services/ai');
+        const response = await generateAiResponse(summaryPrompt, snap, messages);
+        actions.addChatMessage({ role:'ai', text: response || 'Could not generate summary — add your notes and tasks first.', time: Date.now() });
+      } catch {
+        actions.addChatMessage({ role:'ai', text: 'Summary failed — try again.', time: Date.now() });
+      }
+      setSending(false);
       return;
     }
 
@@ -948,7 +992,7 @@ export const AiChat = () => {
               {!isOnline && messages.length > 0 && (
                 <div style={{ padding:'8px 20px', background:'rgba(255,255,255,.04)', borderTop:'0.5px solid rgba(255,255,255,.07)', display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
                   <div style={{ width:6, height:6, borderRadius:'50%', background:'rgba(255,255,255,.2)', flexShrink:0 }}/>
-                  <span style={{ fontSize:11.5, color:'rgba(255,228,200,.45)' }}>Hermes is sleeping — add <code style={{ fontFamily:'monospace', background:'rgba(255,255,255,.07)', padding:'1px 5px', borderRadius:4, color:'rgba(255,248,240,.7)' }}>ANTHROPIC_API_KEY</code> to .env to restore Claude</span>
+                  <span style={{ fontSize:11.5, color:'rgba(255,228,200,.45)' }}>Hermes is sleeping — start Ollama or open this project in dev mode to enable local AI</span>
                 </div>
               )}
 
@@ -970,6 +1014,7 @@ export const AiChat = () => {
                     </div>
                     {[
                       { id:'auto',       icon:'✦', label:'Auto',              sub:'Best available engine, always',    ok: true,                badge:'DEFAULT',   badgeColor:'#f5a524' },
+                      { id:'hermes',     icon:'⊕', label:`Hermes · ${hermesLocalModel}`, sub:'Local Agent · Free · Full access', ok: hermesLocalOnline, badge: hermesLocalOnline ? 'LIVE' : 'OFFLINE', badgeColor: hermesLocalOnline ? '#4ade80' : '#6b7280' },
                       { id:'claude',     icon:'◆', label:'Claude Sonnet 4.5', sub:'Anthropic · Highest quality',      ok: claudeOnline,         badge: claudeOnline ? 'LIVE' : 'ADD KEY', badgeColor: claudeOnline ? '#4ade80' : '#f59e0b' },
                       { id:'ollama',     icon:'◉', label: ollamaStatus.models?.[0] || 'Ollama',  sub:'Local · Private · Fast', ok: ollamaStatus.online,  badge: ollamaStatus.online ? 'LIVE' : 'OFFLINE', badgeColor: ollamaStatus.online ? '#4ade80' : '#6b7280' },
                       { id:'openrouter', icon:'◈', label:'OpenRouter',        sub:'Cloud · Mistral-7B · Free tier',   ok: true,                 badge:'CLOUD',    badgeColor:'#60a5fa' },
