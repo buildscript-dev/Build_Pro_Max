@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useResponsive } from '../hooks/useResponsive';
 import { GlassCard, PaperButton, Icon, AiOrb, Avatar } from '../components/ui/Icons';
 import { useAppState, useAppActions, useAppStore } from '../store/AppContext';
-import { generateAiResponse } from '../services/ai';
+import { generateAiResponse, generateImage, generateImageUrl } from '../services/ai';
 import {
   getMemoryProfile, setMemoryProfile, appendToMemoryProfile,
   checkObsidianStatus, syncToObsidian, syncFromObsidian,
@@ -203,17 +203,56 @@ const MessageBubble = ({ msg, onAction }) => {
       }
       <div style={{ maxWidth:'76%', padding:'11px 15px', ...(isUser ? userBubble : aiBubble) }}>
         <div style={{ fontSize:13.5, lineHeight:1.65, whiteSpace:'pre-wrap', color:'rgba(255,248,240,0.92)' }}>{msg.text}</div>
+        {msg.imageUrl && (
+          <div style={{ marginTop:10, borderRadius:12, overflow:'hidden', maxWidth:280, boxShadow:'0 4px 20px rgba(0,0,0,0.5)' }}>
+            <img
+              src={msg.imageUrl}
+              alt="AI generated"
+              style={{ width:'100%', display:'block', borderRadius:12 }}
+              onError={e => { e.target.style.display='none'; }}
+            />
+          </div>
+        )}
         {msg.actions?.length > 0 && (
-          <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:10 }}>
-            {msg.actions.map((a,j) => (
-              <button key={j} type="button" onClick={() => onAction(a)} style={{
-                padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:600, cursor:'pointer',
-                background: j===0 ? 'linear-gradient(135deg,#f5a524,#f06b1c)' : 'rgba(255,255,255,.08)',
-                color: j===0 ? '#fff' : 'rgba(255,248,240,.72)',
-                border: j===0 ? 'none' : '0.5px solid rgba(255,255,255,.14)',
-                boxShadow: j===0 ? '0 2px 8px rgba(240,107,28,.4)' : 'none',
-              }}>{a}</button>
-            ))}
+          <div style={{ display:'flex', flexWrap:'wrap', gap:7, marginTop:12 }}>
+            {msg.actions.map((a,j) => {
+              const isCreate = a.includes('Create');
+              const isImage  = a.includes('Image') || a.includes('Generate');
+              const isPrimary = j === 0 && !isCreate && !isImage;
+              let bg, color, border, shadow;
+              if (isImage) {
+                bg     = 'linear-gradient(135deg,#BF5AF2,#9b40d4)';
+                color  = '#fff';
+                border = 'none';
+                shadow = '0 2px 10px rgba(191,90,242,.45)';
+              } else if (isCreate) {
+                bg     = 'linear-gradient(135deg,#30D158,#1a9e40)';
+                color  = '#fff';
+                border = 'none';
+                shadow = '0 2px 10px rgba(48,209,88,.40)';
+              } else if (isPrimary) {
+                bg     = 'linear-gradient(135deg,#f5a524,#f06b1c)';
+                color  = '#fff';
+                border = 'none';
+                shadow = '0 2px 10px rgba(240,107,28,.42)';
+              } else {
+                bg     = 'rgba(255,255,255,.10)';
+                color  = 'rgba(255,248,240,.80)';
+                border = '0.5px solid rgba(255,255,255,.18)';
+                shadow = 'none';
+              }
+              return (
+                <button key={j} type="button" onClick={() => onAction(a)} style={{
+                  padding:'5px 13px', borderRadius:22, fontSize:11.5, fontWeight:600,
+                  cursor:'pointer', background:bg, color, border, boxShadow:shadow,
+                  transition:'transform 100ms ease, box-shadow 100ms ease',
+                  backdropFilter: isPrimary||isCreate||isImage ? 'none' : 'blur(8px)',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow = shadow.replace('10px','16px'); }}
+                onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=shadow; }}
+                >{a}</button>
+              );
+            })}
           </div>
         )}
         <div style={{ fontSize:10, color:'rgba(255,235,210,.35)', marginTop:6, textAlign: isUser ? 'right' : 'left' }}>
@@ -612,14 +651,33 @@ export const AiChat = () => {
     const lower = msg.toLowerCase();
     const suggested = [];
     if (/task|todo|p0|priority/i.test(lower)) suggested.push('📋 Open Tasks');
-    if (/note|write|capture|memory/i.test(lower)) suggested.push('📝 Open Notes');
+    if (/note|write|capture|memory/i.test(lower)) { suggested.push('📝 Open Notes'); suggested.push('✏️ Create Note'); }
     if (/calendar|event|schedule|meeting/i.test(lower)) suggested.push('📅 Open Calendar');
     if (/habit|streak|routine/i.test(lower)) suggested.push('🔥 Open Planner');
     if (/build|ship|roadmap|feature/i.test(lower)) suggested.push('🚀 Open Build');
     if (/email|inbox|gmail|message/i.test(lower)) suggested.push('📬 Open Inbox');
+    if (/image|photo|picture|generate|draw|art|design/i.test(lower)) suggested.push('🎨 Generate Image');
 
     const addLog = (kind, m) => setLogs(prev => [...prev.slice(-18), { kind, msg:m, ts: new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}) }]);
     addLog('HERMES', `Processing: "${msg.slice(0,40)}…"`);
+
+    // ── Image generation shortcut ──────────────────────────────────────────
+    const imgMatch = msg.match(/^(?:generate\s+(?:an?\s+)?image|draw|create\s+(?:an?\s+)?image|imagine)[:\s]+(.+)/i)
+      || (/^generate image:/i.test(msg) && msg.match(/generate image:\s*(.+)/i));
+    if (imgMatch && imgMatch[1]?.trim()) {
+      const prompt = imgMatch[1].trim();
+      addLog('IMAGE', `Generating: "${prompt.slice(0,40)}…"`);
+      const imgUrl = generateImageUrl(prompt, { width: 1024, height: 1024, model: 'flux' });
+      actions.addChatMessage({
+        role: 'ai',
+        text: `Generating image: *${prompt}*\n\nHere it is — powered by Flux AI:`,
+        imageUrl: imgUrl,
+        actions: ['🎨 Generate Another', '📝 Open Notes'],
+        time: Date.now(),
+      });
+      setSending(false);
+      return;
+    }
 
     try {
       const response = await generateAiResponse(msg, store.getSnapshot(), messages);
@@ -745,8 +803,19 @@ export const AiChat = () => {
       '🔥 Open Planner':'planner','🚀 Open Build':'tasks','📬 Open Inbox':'files',
       'Show tasks':'tasks','Show notes':'notes','Show calendar':'calendar',
     };
-    if (navMap[action]) { nav?.(navMap[action]); }
-    else { setDraft(action); inputRef.current?.focus(); }
+    if (action === '✏️ Create Note') {
+      // Navigate to notes and signal new note creation
+      nav?.('notes');
+      setTimeout(() => window.dispatchEvent(new CustomEvent('hermes:create-note')), 300);
+    } else if (action === '🎨 Generate Image' || action === '🎨 Generate Another') {
+      setDraft('Generate image: ');
+      inputRef.current?.focus();
+    } else if (navMap[action]) {
+      nav?.(navMap[action]);
+    } else {
+      setDraft(action);
+      inputRef.current?.focus();
+    }
   }, []);
 
   /* ─── TABS ─────────────────────────────────────────────── */
@@ -770,7 +839,7 @@ export const AiChat = () => {
         .hermes-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 3px; }
 
         /* Inputs */
-        .hermes-input { all: unset; flex:1; font-size:14px; color:var(--ink-1); font-family:var(--font-sans); }
+        .hermes-input { all: unset; flex:1; min-width:0; font-size:14px; color:var(--ink-1); font-family:var(--font-sans); overflow:hidden; text-overflow:ellipsis; }
         .hermes-input::placeholder { color: var(--ink-3); }
         .hermes-textarea { all: unset; width:100%; box-sizing:border-box; font-size:13px; color:var(--ink-1); font-family:var(--font-sans); line-height:1.6; resize:none; }
         .hermes-textarea::placeholder { color: var(--ink-3); }
@@ -997,7 +1066,7 @@ export const AiChat = () => {
               )}
 
               {/* Input */}
-              <div style={{ padding: isMobile ? '8px 10px' : '12px 16px', borderTop:'0.5px solid rgba(255,255,255,.07)', background:'rgba(8,5,3,.50)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', position:'relative' }}>
+              <div style={{ padding: isMobile ? '8px 10px' : '10px 14px', borderTop:'0.5px solid rgba(255,255,255,.07)', background:'rgba(8,5,3,.50)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', position:'relative' }}>
                 {/* /model picker panel */}
                 {showModelPicker && (
                   <div style={{
@@ -1053,10 +1122,11 @@ export const AiChat = () => {
                     🎙️ {voiceTranscript}
                   </div>
                 )}
-                <div className="hermes-chat-input-row" style={{ display:'flex', alignItems:'center', gap: isMobile ? 6 : 10, padding: isMobile ? '8px 10px' : '10px 16px', borderRadius:14, background:'rgba(255,255,255,.07)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', border:'0.5px solid rgba(255,255,255,.14)', boxShadow:'0 2px 16px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 0 rgba(0,0,0,.12)' }}>
+                <div className="hermes-chat-input-row" style={{ display:'flex', alignItems:'center', gap:8, padding: isMobile ? '8px 12px' : '9px 14px', borderRadius:16, background:'rgba(255,255,255,.07)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', border:'0.5px solid rgba(255,255,255,.14)', boxShadow:'0 2px 16px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 0 rgba(0,0,0,.12)' }}>
                   <input
                     ref={inputRef}
                     className="hermes-input"
+                    style={{ minWidth:0 }}
                     placeholder={sending ? 'Hermes is thinking…' : isOnline ? 'Ask anything… or type /model to switch AI' : 'Hermes is sleeping… add ANTHROPIC_API_KEY to .env'}
                     value={draft}
                     onChange={e => {
@@ -1075,19 +1145,39 @@ export const AiChat = () => {
                   <button
                     type="button"
                     onClick={isListening ? stopListening : startListening}
+                    aria-label={isListening ? 'Stop recording' : 'Voice input'}
                     style={{
-                      width:32, height:32, borderRadius:'50%', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center',
+                      width:34, height:34, borderRadius:'50%', flexShrink:0, cursor:'pointer',
+                      display:'flex', alignItems:'center', justifyContent:'center', fontSize:15,
                       background: isListening ? 'rgba(231,64,46,.22)' : 'rgba(255,255,255,.07)',
                       border: isListening ? '1.5px solid var(--accent-coral)' : '0.5px solid rgba(255,255,255,.12)',
                       animation: isListening ? 'hermes-pulse 1s ease-in-out infinite' : 'none',
-                      color: isListening ? 'var(--accent-coral)' : 'rgba(255,228,200,.5)',
+                      color: isListening ? 'var(--accent-coral)' : 'rgba(255,228,200,.55)',
+                      transition: 'background 150ms, border 150ms',
                     }}
                   >
                     🎙️
                   </button>
-                  <PaperButton primary small onClick={() => send()} disabled={sending || !draft.trim()} icon={sending ? undefined : 'arrow'}>
-                    {sending ? '…' : 'Send'}
-                  </PaperButton>
+                  {/* Send button — icon only to save space */}
+                  <button
+                    type="button"
+                    onClick={() => send()}
+                    disabled={sending || !draft.trim()}
+                    aria-label="Send message"
+                    style={{
+                      width:34, height:34, borderRadius:12, flexShrink:0, cursor: (sending || !draft.trim()) ? 'not-allowed' : 'pointer',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      background: (sending || !draft.trim()) ? 'rgba(255,255,255,.07)' : 'linear-gradient(135deg,#f5a524,#f06b1c)',
+                      border: 'none',
+                      opacity: (sending || !draft.trim()) ? 0.45 : 1,
+                      boxShadow: (sending || !draft.trim()) ? 'none' : '0 2px 10px rgba(240,107,28,.45)',
+                      transition: 'background 150ms, opacity 150ms, box-shadow 150ms',
+                      color: '#fff',
+                      fontSize: 15,
+                    }}
+                  >
+                    {sending ? '…' : '→'}
+                  </button>
                 </div>
                 {!isMobile && (
                   <div className="hermes-suggestions" style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:10 }}>

@@ -514,6 +514,25 @@ export async function fetchAndSummarizeUrl(url) {
 
 export { heuristicTitle, heuristicTag, heuristicIcon, heuristicSummary };
 
+// ─── Image generation via Pollinations.ai (no API key required) ───────────────
+export function generateImageUrl(prompt, options = {}) {
+  const { width = 1024, height = 1024, model = 'flux', seed } = options;
+  const encoded = encodeURIComponent(prompt.trim());
+  const seedParam = seed ? `&seed=${seed}` : '';
+  return `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&model=${model}&nologo=true${seedParam}`;
+}
+
+export async function generateImage(prompt, options = {}) {
+  const url = generateImageUrl(prompt, options);
+  // Verify the image loads (Pollinations generates on first request)
+  try {
+    const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(20000) });
+    return { url, ok: res.ok, prompt };
+  } catch {
+    return { url, ok: true, prompt }; // Return URL anyway — browser will render it
+  }
+}
+
 /* ─── NEW: Generate subtasks for a task ─────────────────────── */
 export async function generateSubtasks(taskTitle, context) {
   const prompt = `For the task "${taskTitle}", generate 3-5 concrete, actionable subtasks. Return ONLY a JSON array of strings like ["subtask 1","subtask 2"]. No explanation.`;
