@@ -493,7 +493,7 @@ function HelloCard({ data, expanded, accent }) {
 }
 
 function FocusCard({ data, expanded, accent }) {
-  const done = data.schedule.filter(s => s.isFocus).length;
+  const done = (data.schedule || []).filter(s => s.isFocus).length;
   const total = 4;
   const pct = Math.min(100, Math.round((done / total) * 100));
   return (
@@ -519,7 +519,7 @@ function FocusCard({ data, expanded, accent }) {
 }
 
 function ScheduleCard({ data, expanded, accent, actions, onNavigate }) {
-  const items = expanded ? data.schedule : data.schedule.slice(0, 7);
+  const items = expanded ? (data.schedule || []) : (data.schedule || []).slice(0, 7);
   const [nowTime, setNowTime] = useState(new Date());
   useEffect(() => { const id = setInterval(() => setNowTime(new Date()), 60000); return () => clearInterval(id); }, []);
   const nowStr = nowTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -606,12 +606,12 @@ function ScheduleCard({ data, expanded, accent, actions, onNavigate }) {
 }
 
 function TasksCard({ data, expanded, accent, actions, onNavigate }) {
-  const tasks = expanded ? data.tasks : data.tasks.filter((t) => t.status !== "done").slice(0, 5);
+  const tasks = expanded ? (data.tasks || []) : (data.tasks || []).filter((t) => t.status !== "done").slice(0, 5);
   return (
     <div style={{ padding: expanded ? 0 : 22, height: "100%", display: "flex", flexDirection: "column" }}>
       <div className="t-cap" style={{ color: accent }}>Up next</div>
       <div className="t-display" style={{ fontSize: expanded ? 32 : 20, marginTop: 4, marginBottom: 14 }}>
-        {tasks.filter((t) => t.status !== "done").length} tasks · {data.tasks.filter(t => t.priority === 'P0' && t.status !== 'done').length} P0
+        {tasks.filter((t) => t.status !== "done").length} tasks · {(data.tasks || []).filter(t => t.priority === 'P0' && t.status !== 'done').length} P0
       </div>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, overflow: "hidden", minHeight: 0 }}>
         {tasks.map((t) => {
@@ -674,7 +674,7 @@ function GoalsCard({ data, expanded, accent }) {
       <div className="t-cap" style={{ color: accent }}>Goals · Q2</div>
       <div className="t-display" style={{ fontSize: expanded ? 32 : 20, marginTop: 4, marginBottom: 16 }}>Where you stand</div>
       <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-        {data.goals.map((g, i) => {
+        {(data.goals || []).map((g, i) => {
           const c = accentColor[g.color] || accent;
           return (
             <div key={i}>
@@ -725,7 +725,7 @@ function AiInboxCard({ data, expanded, accent }) {
 }
 
 function NotesCard({ data, expanded, accent, onNavigate, actions }) {
-  const notes = expanded ? data.notes : data.notes.slice(0, 3);
+  const notes = expanded ? (data.notes || []) : (data.notes || []).slice(0, 3);
   return (
     <div style={{ padding: expanded ? 0 : 22, height: "100%", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -767,7 +767,7 @@ function NotesCard({ data, expanded, accent, onNavigate, actions }) {
 function DevicesCard({ data, expanded, accent, onNavigate }) {
   return (
     <div style={{ padding: expanded ? 0 : 22, height: "100%", display: "flex", flexDirection: "column" }}>
-      <div className="t-cap" style={{ color: accent }}>Connected · {data.devices.filter((d) => d.online).length}/{data.devices.length}</div>
+      <div className="t-cap" style={{ color: accent }}>Connected · {(data.devices || []).filter((d) => d.online).length}/{(data.devices || []).length}</div>
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -778,7 +778,7 @@ function DevicesCard({ data, expanded, accent, onNavigate }) {
           marginTop: 12, flex: 1
         }}
       >
-        {data.devices.map((d) =>
+        {(data.devices || []).map((d) =>
         <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
             <Icon name={d.kind} size={16} color={d.online ? "var(--ink-1)" : "var(--ink-4)"} />
             <span style={{ fontSize: 12, color: d.online ? "var(--ink-1)" : "var(--ink-4)", flex: 1, textAlign: "left" }}>{d.name}</span>
