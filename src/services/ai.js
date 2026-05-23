@@ -266,19 +266,24 @@ export async function generateEmailDraft(contact, context) {
   return result || `Hey ${contact.name?.split(' ')[0] || 'there'},\n\nHope you're doing well. I wanted to check in — it's been a bit since we last connected. Let me know if you have time to catch up soon.\n\nBest,\n${context.user?.name || 'Lior'}`;
 }
 
+function stripActionTokens(text) {
+  if (!text) return text;
+  return text.replace(/\[action:\s*\w+\s*,\s*[^\]]*\]/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 export async function generateDailyBriefing(context) {
-  const system = buildSystemPrompt(context, 'Generate a 2-3 sentence daily briefing.');
+  const system = buildSystemPrompt(context, 'Generate a 2-3 sentence daily briefing. Do not include any action tokens or special formatting.');
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const todayTasks = (context.tasks || []).filter(t => /today/i.test(t.due) && t.status !== 'done');
   const overdueTasks = (context.tasks || []).filter(t => t.status !== 'done' && /past/i.test(t.due));
-  const prompt = `Today is ${dateStr}. The user has ${todayTasks.length} tasks due today, ${overdueTasks.length} overdue, and ${context.notes?.length || 0} notes. Their top priority P0 tasks are: ${(context.tasks || []).filter(t => t.priority === 'P0' && t.status !== 'done').map(t => t.title).join(', ') || 'none set'}. Give a 2-3 sentence briefing on what to focus on today. Be concise and actionable.`;
+  const prompt = `Today is ${dateStr}. The user has ${todayTasks.length} tasks due today, ${overdueTasks.length} overdue, and ${context.notes?.length || 0} notes. Their top priority P0 tasks are: ${(context.tasks || []).filter(t => t.priority === 'P0' && t.status !== 'done').map(t => t.title).join(', ') || 'none set'}. Give a 2-3 sentence briefing on what to focus on today. Be concise and actionable. Plain text only.`;
 
   const result = await callAI([
     { role: 'system', content: system },
     { role: 'user', content: prompt },
   ], 200);
-  if (result) return result;
+  if (result) return stripActionTokens(result);
   const p0 = context.tasks?.filter(t => t.priority === 'P0' && t.status !== 'done');
   if (p0?.length > 0) return `Today's focus: ${p0[0].title}${p0.length > 1 ? ` and ${p0.length - 1} other P0 task(s)` : ''}. ${overdueTasks.length > 0 ? `${overdueTasks.length} overdue item(s) need attention too.` : 'Stay on track.'}`;
   return `${todayTasks.length} task(s) due today, ${overdueTasks.length} overdue. Start with the highest priority and work down.`;

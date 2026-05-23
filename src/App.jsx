@@ -10,7 +10,6 @@ import { logout } from './store/auth';
 import { AmbientVideo } from './components/effects/AmbientVideo';
 import { PageTransition } from './components/effects/PageTransition';
 import { FocusPanel } from './components/focus/FocusPanel'
-import { ShaderAnimation } from './components/ui/ShaderAnimation';
 
 const AiChat = lazy(() => import('./screens/AiChat').then(m => ({ default: m.AiChat })));
 const Calendar = lazy(() => import('./screens/Calendar').then(m => ({ default: m.Calendar })));
@@ -34,7 +33,7 @@ function BootSplash() {
         justifyContent: 'center',
         flexDirection: 'column',
         gap: 18,
-        background: 'rgba(236, 236, 236, 0.96)',
+        background: 'rgba(8, 8, 8, 0.96)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         animation: 'splash-out 1s 600ms forwards',
@@ -53,7 +52,7 @@ function BootSplash() {
           Build_PRO_MAX_1
         </div>
         <div style={{ fontSize: 11, color: 'var(--ink-3)', letterSpacing: '0.14em', textTransform: 'uppercase', marginTop: 6 }}>
-          B.0.0.1 · Paper × Liquid Glass
+          B.0.1 · Liquid Glass
         </div>
       </div>
     </div>
@@ -227,10 +226,19 @@ export default function App() {
 
   return (
     <>
-      {/* ── Global shader background — always on ── */}
-      <ShaderAnimation style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />
-      {/* Dark scrim — brings down shader brightness so panels float cleanly */}
-      <div style={{ position: 'fixed', inset: 0, zIndex: 1, background: 'rgba(0,0,0,0.48)', pointerEvents: 'none' }} />
+      {/* ── CSS gradient mesh background ── */}
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
+        background: `
+          radial-gradient(ellipse 80% 60% at 15% 15%, rgba(245,165,36,0.09) 0%, transparent 55%),
+          radial-gradient(ellipse 60% 50% at 85% 20%, rgba(231,64,46,0.07) 0%, transparent 50%),
+          radial-gradient(ellipse 70% 55% at 50% 90%, rgba(194,24,91,0.05) 0%, transparent 50%),
+          radial-gradient(ellipse 50% 40% at 80% 80%, rgba(240,107,28,0.06) 0%, transparent 45%),
+          #050304
+        `,
+      }} />
+      {/* Subtle dark scrim to float panels cleanly */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 1, background: 'rgba(0,0,0,0.32)', pointerEvents: 'none' }} />
 
       <div
         ref={contentRef}
@@ -256,7 +264,7 @@ export default function App() {
         <div style={{
           position: 'fixed', inset: 0, zIndex: 100,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(246,241,229,.85)', backdropFilter: 'blur(8px)',
+          background: 'rgba(8,8,8,.85)', backdropFilter: 'blur(8px)',
           animation: 'expand-fade 200ms var(--ease-glass)',
         }}>
           <Auth onAuth={handleAuth} />
@@ -264,7 +272,7 @@ export default function App() {
       )}
 
       {showOnboarding && authUser && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(246,241,229,0.55)', backdropFilter: 'blur(6px)' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(5,3,4,0.75)', backdropFilter: 'blur(6px)' }}>
           <Suspense fallback={<div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--ink-3)', background: 'var(--paper-0)' }}>Loading onboarding…</div>}>
             <Onboarding onComplete={handleOnboardingComplete} />
           </Suspense>

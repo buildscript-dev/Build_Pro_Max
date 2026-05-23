@@ -41,6 +41,7 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
   const [captureInput, setCaptureInput] = useState('');
   const [showCapture, setShowCapture] = useState(false);
   const captureRef = useRef(null);
+  const [briefingExpanded, setBriefingExpanded] = useState(false);
 
   const D = state;
   const t = tweaksProp || state.tweaks;
@@ -200,12 +201,29 @@ export const Dashboard = ({ tweaks: tweaksProp, onNavigate }) => {
             {greeting}, <span className="t-display-italic" style={{ color: "var(--accent-orange)" }}>{D.user?.name?.split(' ')[0] || "User"}</span>.
             {focusActive && <span style={{ fontSize: 'clamp(13px, 1.8vw, 18px)', marginLeft: 'clamp(8px, 1.6vw, 16px)', color: "var(--accent-coral)" }}>Focus · {formatTimer(focusRemaining)}</span>}
           </h1>
-          <div style={{ marginTop: 8, fontSize: 'clamp(12px, 1.4vw, 14px)', color: "var(--ink-2)", maxWidth: 640, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-            <span className="ai-text" style={{ fontWeight: 500, flexShrink: 0 }}>Hermes: </span>
-            {aiHeadlineLoading
-              ? <span style={{ color: 'var(--ink-3)' }}>Generating your briefing…</span>
-              : <span>{aiHeadline || (D.aiSuggestions?.[0]?.text || `Today's big rock: ${D.tasks?.find(t => t.priority === 'P0' && t.status !== 'done')?.title || D.today.bigRock || 'set a P0 task to get started'}.`)}</span>
-            }
+          <div style={{ marginTop: 8, fontSize: 'clamp(12px, 1.4vw, 14px)', color: "var(--ink-2)", maxWidth: 640 }}>
+            <span className="ai-text" style={{ fontWeight: 500 }}>Hermes: </span>
+            {aiHeadlineLoading ? (
+              <span style={{ color: 'var(--ink-3)' }}>Generating your briefing…</span>
+            ) : (
+              <>
+                <span style={{
+                  display: '-webkit-box', WebkitBoxOrient: 'vertical',
+                  WebkitLineClamp: briefingExpanded ? 'unset' : 3,
+                  overflow: 'hidden',
+                }}>
+                  {aiHeadline || (D.aiSuggestions?.[0]?.text || `Today's big rock: ${D.tasks?.find(t => t.priority === 'P0' && t.status !== 'done')?.title || D.today.bigRock || 'set a P0 task to get started'}.`)}
+                </span>
+                {aiHeadline && aiHeadline.length > 120 && (
+                  <button
+                    onClick={() => setBriefingExpanded(v => !v)}
+                    style={{ fontSize: 11, color: 'var(--accent-orange)', marginLeft: 4, opacity: 0.8 }}
+                  >
+                    {briefingExpanded ? 'Less' : 'Read more'}
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -524,7 +542,18 @@ function ScheduleCard({ data, expanded, accent, actions, onNavigate }) {
         </div>
       </div>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, overflow: "hidden", minHeight: 0 }}>
-        {items.map((it, i) => {
+        {items.length === 0 ? (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, opacity: 0.7 }}>
+            <div style={{ fontSize: 28 }}>✦</div>
+            <div style={{ fontSize: 13, color: "var(--ink-3)", textAlign: "center", lineHeight: 1.5 }}>
+              Your day is wide open.<br />
+              <span style={{ color: "var(--ink-2)" }}>A clear schedule is a gift.</span>
+            </div>
+            <button onClick={() => onNavigate?.('planner')} style={{ fontSize: 11, color: "var(--accent-orange)", marginTop: 4, opacity: 0.8 }}>
+              Plan your day →
+            </button>
+          </div>
+        ) : items.map((it, i) => {
           const cAccent = accentColor[it.color] || accent;
           const isPast = i < 2;
           return (
@@ -644,7 +673,7 @@ function GoalsCard({ data, expanded, accent }) {
     <div style={{ padding: expanded ? 0 : 22, height: "100%", display: "flex", flexDirection: "column" }}>
       <div className="t-cap" style={{ color: accent }}>Goals · Q2</div>
       <div className="t-display" style={{ fontSize: expanded ? 32 : 20, marginTop: 4, marginBottom: 16 }}>Where you stand</div>
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: expanded ? "1fr 1fr" : "1fr 1fr", gap: 14 }}>
+      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         {data.goals.map((g, i) => {
           const c = accentColor[g.color] || accent;
           return (
@@ -653,8 +682,15 @@ function GoalsCard({ data, expanded, accent }) {
                 <span style={{ fontSize: 13, fontWeight: 500 }}>{g.name}</span>
                 <span className="t-num" style={{ fontSize: 22, color: c }}>{g.pct}%</span>
               </div>
-              <div style={{ marginTop: 6, height: 6, borderRadius: 999, background: "rgba(255,255,255,.07)", overflow: "hidden" }}>
-                <div style={{ width: `${g.pct}%`, height: "100%", background: `linear-gradient(90deg, ${c}, ${c}cc)`, borderRadius: 999 }} />
+              <div style={{ marginTop: 6, position: "relative", height: 6, borderRadius: 999, background: "rgba(255,255,255,.07)" }}>
+                <div style={{ position: "absolute", inset: 0, width: `${g.pct}%`, background: `linear-gradient(90deg, ${c}, ${c}cc)`, borderRadius: 999 }} />
+                {[25, 50, 75].map(tick => (
+                  <div key={tick} style={{
+                    position: "absolute", top: -2, left: `${tick}%`, transform: "translateX(-50%)",
+                    width: 1.5, height: 10, borderRadius: 1,
+                    background: g.pct >= tick ? "rgba(255,255,255,.5)" : "rgba(255,255,255,.15)",
+                  }} />
+                ))}
               </div>
               <div style={{ marginTop: 5, fontSize: 10.5, color: "var(--ink-3)" }}>{g.sub}</div>
             </div>);
@@ -688,12 +724,20 @@ function AiInboxCard({ data, expanded, accent }) {
   );
 }
 
-function NotesCard({ data, expanded, accent, onNavigate }) {
+function NotesCard({ data, expanded, accent, onNavigate, actions }) {
   const notes = expanded ? data.notes : data.notes.slice(0, 3);
   return (
     <div style={{ padding: expanded ? 0 : 22, height: "100%", display: "flex", flexDirection: "column" }}>
-      <div className="t-cap" style={{ color: accent }}>Recent notes</div>
-      <div style={{ flex: 1, marginTop: 10, display: "flex", flexDirection: "column", gap: 10, minHeight: 0, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div className="t-cap" style={{ color: accent }}>Recent notes</div>
+        <button
+          onClick={(e) => { e.stopPropagation(); actions?.addNote({ title: 'Untitled', tag: 'Inbox', content: '', preview: '' }); onNavigate?.('notes'); }}
+          style={{ fontSize: 10.5, color: "var(--ink-3)", border: "0.5px dashed rgba(255,255,255,.15)", borderRadius: 6, padding: "3px 8px" }}
+        >
+          + New
+        </button>
+      </div>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, minHeight: 0, overflow: "hidden" }}>
         {notes.map((n) =>
         <button
           key={n.id}
@@ -707,11 +751,11 @@ function NotesCard({ data, expanded, accent, onNavigate }) {
           }}
         >
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--ink-1)" }}>{n.title}</span>
-              <span style={{ fontSize: 10, color: "var(--ink-3)" }}>{n.edited}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--ink-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "70%" }}>{n.title}</span>
+              <span style={{ fontSize: 10, color: "var(--ink-3)", flexShrink: 0 }}>{n.edited}</span>
             </div>
             <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 3, lineHeight: 1.4,
-            overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical"
+            overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical"
           }}>{n.preview || 'No preview'}</div>
         </button>
         )}

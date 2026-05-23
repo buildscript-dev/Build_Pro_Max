@@ -137,7 +137,7 @@ export const TopBar = ({ user, today, onOpenCmdK, variant = "dock", active, onSe
             Build_PRO_MAX_1
           </span>
           <span style={{ fontSize: 9.5, color: "var(--ink-3)", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-            B.0.0.1
+            B.0.1
           </span>
         </div>
       </button>

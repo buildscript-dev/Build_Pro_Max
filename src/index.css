@@ -111,6 +111,22 @@
   --ease-genie: cubic-bezier(0.34, 1.56, 0.36, 1);
   --ease-glass: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-snap:  cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ═══ SEMANTIC COLOR TOKENS (Apple HIG-aligned) ═══════════ */
+  --color-critical:    #FF453A;
+  --color-warning:     #FF9F0A;
+  --color-interactive: #0A84FF;
+  --color-success:     #30D158;
+  --color-hermes:      #FF6B00;
+  --color-neutral:     rgba(255, 255, 255, 0.55);
+
+  /* ═══ TYPOGRAPHY SCALE ════════════════════════════════════ */
+  --text-display:  clamp(32px, 6vw, 72px);
+  --text-title:    clamp(22px, 3.5vw, 40px);
+  --text-headline: clamp(17px, 2vw, 22px);
+  --text-body:     clamp(13px, 1.4vw, 15px);
+  --text-label:    clamp(11px, 1.1vw, 13px);
+  --text-caption:  clamp(9px, 0.9vw, 11px);
 }
 
 /* ─── Responsive overrides ─────────────────────────── */
@@ -500,6 +516,7 @@ body.canvas-mono .glass {
 }
 .card-rise {
   animation: card-rise 720ms var(--ease-genie) both;
+  will-change: transform, opacity;
 }
 
 /* ─── Typography helpers ───────────────────────────────────── */
@@ -594,7 +611,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .cmdk-input::placeholder { color: var(--ink-3); font-style: italic; }
 
 /* Expanded card animation */
-@keyframes expand-fade { from { backdrop-filter: blur(0px); background: rgba(46,30,12,0) } to { backdrop-filter: blur(2px); background: rgba(46,30,12,.06) } }
+@keyframes expand-fade { from { backdrop-filter: blur(0px); background: rgba(0,0,0,0) } to { backdrop-filter: blur(4px); background: rgba(0,0,0,.30) } }
 @keyframes genie-in {
   0%   { opacity: 0; transform: translateY(40px) scale(.6); border-radius: 32px; filter: blur(8px); }
   50%  { opacity: 1; filter: blur(0); }
@@ -1171,23 +1188,69 @@ body.focus-active .top-bar-awards {
   transform: translateX(0);
 }
 
+/* ─── Bento card hover lift ───────────────────────────────── */
+.bento-card {
+  will-change: transform;
+  transition: transform 360ms var(--ease-genie), filter 360ms var(--ease-genie);
+}
+.bento-card:not([style*="grabbing"]):hover > .glass {
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.14) inset,
+    0 -1px 0 rgba(0,0,0,.22) inset,
+    0 32px 64px -16px rgba(0,0,0,.55),
+    0 12px 28px -10px rgba(0,0,0,.35);
+}
+
 /* ─── Glass hover lift (awwwards micro-interaction) ──────── */
 .glass-hover {
   transition: transform 360ms var(--ease-genie), box-shadow 360ms var(--ease-genie);
 }
 .glass-hover:hover {
-  transform: translateY(-3px) scale(1.005);
+  transform: translateY(-2px) scale(1.004);
   box-shadow:
-    0 2px 1px rgba(255,255,255,.95) inset,
-    0 -1px 1px rgba(0,0,0,.06) inset,
-    0 40px 80px -20px rgba(46, 30, 12, 0.40),
-    0 16px 32px -10px rgba(46, 30, 12, 0.22),
-    0 2px 6px -2px rgba(46, 30, 12, 0.10);
+    0 1px 0 rgba(255,255,255,.12) inset,
+    0 -1px 0 rgba(0,0,0,.20) inset,
+    0 32px 64px -16px rgba(0,0,0,.50),
+    0 12px 28px -10px rgba(0,0,0,.30);
 }
 
 /* ─── Magnetic button effect placeholder ───────────────────── */
 .magnetic-btn {
   transition: transform 200ms var(--ease-snap);
+}
+
+/* ─── Tooltip system — 350ms hover delay ──────────────────── */
+[data-tooltip] {
+  position: relative;
+}
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: rgba(20,20,20,0.92);
+  border: 0.5px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease, transform 150ms ease;
+  transition-delay: 0ms;
+  z-index: 9000;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+[data-tooltip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  transition-delay: 350ms;
 }
 
 /* ─── Spline scene container ───────────────────────────────── */
